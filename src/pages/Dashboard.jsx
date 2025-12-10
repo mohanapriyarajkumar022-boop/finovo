@@ -4,6 +4,7 @@ import API_BASE from '../config/api';
 import { Pie } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import styled, { keyframes } from 'styled-components';
+import { useLanguage } from '../context/LanguageContext';
 
 // --- IMPORT YOUR INSIGHTS AND SCHEMES COMPONENTS ---
 import FinancialInsights from '../pages/FinancialInsights';
@@ -210,6 +211,7 @@ const CloseButton = styled.button`
 
 // --- DASHBOARD COMPONENT ---
 const Dashboardpage = () => {
+  const { t } = useLanguage();
   const [transactions, setTransactions] = useState([]);
   const [income, setIncome] = useState(0);
   const [expense, setExpense] = useState(0);

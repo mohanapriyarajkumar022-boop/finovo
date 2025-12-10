@@ -1,5 +1,6 @@
 // frontend/src/pages/TaxPage.jsx
 import React, { useState, useEffect, Suspense } from 'react';
+import { useLanguage } from '../context/LanguageContext';
 
 // Safe component imports with error boundaries
 const TaxDashboard = React.lazy(() => import('../Components/TaxDashboard'));
@@ -44,6 +45,7 @@ const ErrorBoundary = ({ children, componentName }) => {
 };
 
 const TaxPage = ({ userSession }) => {
+  const { t } = useLanguage();
   const [apiStatus, setApiStatus] = useState('loading');
 
   useEffect(() => {

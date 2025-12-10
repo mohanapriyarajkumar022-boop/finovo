@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Calendar, DollarSign, Edit, Trash2, PlusCircle, Printer, Download, BarChart3, TrendingUp, Search, Eye, EyeOff, History, Undo2, Ban, Upload, FileSpreadsheet, AlertCircle, Plus, X, CheckSquare, GitCompare, IndianRupee, Filter } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, AreaChart, Area } from 'recharts';
 import authService from '../services/authService';
+import { useLanguage } from '../context/LanguageContext';
 
 const initialSubCategories = {
     'Salary': ['Base Salary', 'Bonus', 'Commission', 'Overtime Pay'],

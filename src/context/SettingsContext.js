@@ -1,7 +1,5 @@
 // frontend/src/contexts/SettingsContext.js
 import React, { createContext, useContext, useState, useEffect } from 'react';
-
-// Import settingsService
 import settingsService from '../services/settingsService';
 
 const SettingsContext = createContext();
@@ -21,112 +19,108 @@ export const SettingsProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [backendAvailable, setBackendAvailable] = useState(false);
 
-  // Check if user is authenticated
+  const getCurrentUserEmail = () => {
+    return localStorage.getItem('userEmail') || '';
+  };
+
+  const getCurrentUserName = () => {
+    return localStorage.getItem('userName') || '';
+  };
+
+  const getCurrentUserId = () => {
+    return localStorage.getItem('userId') || '';
+  };
+
   const checkAuthentication = () => {
     try {
       const token = localStorage.getItem('sessionToken') || localStorage.getItem('token');
-      let tenantId = localStorage.getItem('tenantId');
+      const userId = getCurrentUserId();
+      const isAuthenticated = !!token && !!userId;
       
-      // Ensure tenantId exists
-      if (!tenantId) {
-        tenantId = 'dev-tenant-default';
-        localStorage.setItem('tenantId', tenantId);
-      }
+      console.log('🔐 Authentication check:', { 
+        isAuthenticated, 
+        hasToken: !!token, 
+        hasUserId: !!userId,
+        userId: userId,
+        email: getCurrentUserEmail()
+      });
       
-      const authenticated = !!token;
-      setIsAuthenticated(authenticated);
-      console.log('🔐 Authentication check:', { authenticated, hasToken: !!token, tenantId });
-      return authenticated;
+      setIsAuthenticated(isAuthenticated);
+      return isAuthenticated;
     } catch (err) {
       console.error('Error checking authentication:', err);
       return false;
     }
   };
 
-  // Get default settings for local storage - ENHANCED WITH PROPER DEFAULTS
-  const getDefaultSettings = () => ({
-    profile: {
-      name: '',
-      email: '',
-      phone: '',
-      bio: '',
-      profilePhoto: '',
-      profilePhotoUrl: ''
-    },
-    account: {
-      type: 'individual',
-      status: 'active'
-    },
-    theme: {
-      mode: 'light',
-      primaryColor: '#8B5CF6',
-      fontSize: 'medium',
-      fontFamily: 'Inter'
-    },
-    notifications: {
-      email: true,
-      push: true,
-      transactionAlerts: true,
-      weeklyReports: true,
-      budgetAlerts: true,
-      securityAlerts: true
-    },
-    privacy: {
-      profileVisibility: 'private',
-      showEmail: false,
-      twoFactorAuth: false,
-      loginAlerts: true
-    },
-    appearance: {
-      compactMode: false,
-      showAnimations: true,
-      currencySymbol: '$',
-      dateFormat: 'MM/DD/YYYY'
-    },
-    language: {
-      appLanguage: 'en',
-      locale: 'en-US',
-      currency: 'USD',
-      timezone: 'UTC'
-    },
-    performance: {
-      enableCache: true,
-      autoSave: true,
-      lowDataMode: false
-    },
-    accessibility: {
-      highContrast: false,
-      reduceMotion: false,
-      screenReader: false,
-      keyboardNavigation: false
-    }
-  });
-
-  // Load settings from localStorage
-  const loadLocalSettings = () => {
-    try {
-      const localSettings = localStorage.getItem('appSettings');
-      if (localSettings) {
-        const parsed = JSON.parse(localSettings);
-        console.log('📁 Loaded settings from localStorage');
-        // Ensure all fields have proper values
-        return ensureSettingsStructure(parsed);
+  const getDefaultSettings = () => {
+    const currentEmail = getCurrentUserEmail();
+    const currentName = getCurrentUserName();
+    
+    return {
+      profile: {
+        name: currentName,
+        email: currentEmail,
+        phone: '',
+        bio: '',
+        profilePhoto: '',
+        profilePhotoUrl: ''
+      },
+      account: {
+        type: 'individual',
+        status: 'active'
+      },
+      theme: {
+        mode: 'light',
+        primaryColor: '#8B5CF6',
+        fontSize: 'medium',
+        fontFamily: 'Inter'
+      },
+      notifications: {
+        email: true,
+        push: true,
+        transactionAlerts: true,
+        weeklyReports: true,
+        budgetAlerts: true,
+        securityAlerts: true
+      },
+      privacy: {
+        profileVisibility: 'private',
+        showEmail: false,
+        twoFactorAuth: false,
+        loginAlerts: true
+      },
+      appearance: {
+        compactMode: false,
+        showAnimations: true,
+        currencySymbol: '$',
+        dateFormat: 'MM/DD/YYYY'
+      },
+      language: {
+        appLanguage: 'en',
+        locale: 'en-US',
+        currency: 'USD',
+        timezone: 'UTC'
+      },
+      performance: {
+        enableCache: true,
+        autoSave: true,
+        lowDataMode: false
+      },
+      accessibility: {
+        highContrast: false,
+        reduceMotion: false,
+        screenReader: false,
+        keyboardNavigation: false
       }
-      return getDefaultSettings();
-    } catch (error) {
-      console.error('Error loading local settings:', error);
-      return getDefaultSettings();
-    }
+    };
   };
 
-  // Ensure settings have proper structure and no undefined values
   const ensureSettingsStructure = (settingsData) => {
     const defaultSettings = getDefaultSettings();
+    const currentEmail = getCurrentUserEmail();
+    const currentName = getCurrentUserName();
     
-    // Deep merge to ensure all fields exist
-    const ensuredSettings = JSON.parse(JSON.stringify(defaultSettings));
-    
-    // Recursively merge settings
     const mergeDeep = (target, source) => {
       for (const key in source) {
         if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
@@ -139,37 +133,24 @@ export const SettingsProvider = ({ children }) => {
       return target;
     };
     
-    return mergeDeep(ensuredSettings, settingsData);
+    const merged = mergeDeep(JSON.parse(JSON.stringify(defaultSettings)), settingsData);
+    
+    // Always ensure email and name are from current session
+    merged.profile.email = currentEmail;
+    merged.profile.name = currentName;
+    
+    return merged;
   };
 
-  // Save settings to localStorage
-  const saveLocalSettings = (settingsData) => {
-    try {
-      const ensuredSettings = ensureSettingsStructure(settingsData);
-      localStorage.setItem('appSettings', JSON.stringify(ensuredSettings));
-      setSettings(ensuredSettings);
-      console.log('💾 Saved sucessfully database');
-      return { success: true, data: ensuredSettings };
-    } catch (error) {
-      console.error('Error saving local settings:', error);
-      return { success: false, error: error.message };
-    }
-  };
-
-  // Check if backend is available
   const checkBackendAvailability = async () => {
     try {
-      console.log('🔍 Checking backend availability...');
       const response = await fetch('http://localhost:5000/api/health', {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
       });
       
       const isAvailable = response.ok;
       setBackendAvailable(isAvailable);
-      console.log('🔍 Backend availability:', isAvailable);
       return isAvailable;
     } catch (error) {
       console.warn('⚠️ Backend is not available:', error.message);
@@ -178,26 +159,6 @@ export const SettingsProvider = ({ children }) => {
     }
   };
 
-  // Safe settings merge function
-  const mergeSettings = (currentSettings, section, sectionData) => {
-    const safeCurrentSettings = currentSettings || getDefaultSettings();
-    const currentSection = safeCurrentSettings[section] || {};
-    
-    // Clean section data to remove undefined values
-    const cleanSectionData = Object.fromEntries(
-      Object.entries(sectionData).filter(([_, value]) => value !== undefined && value !== null)
-    );
-    
-    return {
-      ...safeCurrentSettings,
-      [section]: {
-        ...currentSection,
-        ...cleanSectionData
-      }
-    };
-  };
-
-  // Fetch settings from backend or localStorage
   const fetchSettings = async () => {
     try {
       setLoading(true);
@@ -206,211 +167,178 @@ export const SettingsProvider = ({ children }) => {
       const authenticated = checkAuthentication();
       const backendAvailable = await checkBackendAvailability();
 
-      console.log('🔄 Fetch settings conditions:', {
+      console.log('🔄 Fetch settings:', {
         authenticated,
-        backendAvailable
+        backendAvailable,
+        currentEmail: getCurrentUserEmail()
       });
 
       if (authenticated && backendAvailable) {
-        // Try to fetch from backend
         try {
-          console.log('🔄 Fetching settings from backend...');
           const response = await settingsService.getSettings();
           
-          if (response && response.success) {
-            const ensuredSettings = ensureSettingsStructure(response.data);
-            setSettings(ensuredSettings);
-            console.log('✅ Settings loaded from backend:', ensuredSettings);
+          if (response && response.success && response.data) {
+            let backendSettings = response.data;
             
-            // Also save to localStorage as backup
-            saveLocalSettings(ensuredSettings);
+            // Ensure current user info
+            if (backendSettings.profile) {
+              backendSettings.profile.email = getCurrentUserEmail();
+              backendSettings.profile.name = getCurrentUserName();
+            }
+            
+            const ensuredSettings = ensureSettingsStructure(backendSettings);
+            setSettings(ensuredSettings);
+            console.log('✅ Settings loaded from backend');
           } else {
-            throw new Error(response?.message || 'Invalid response from backend');
+            throw new Error('Invalid response from backend');
           }
         } catch (backendError) {
-          console.warn('⚠️ Backend fetch failed, using local settings:', backendError.message);
-          const localSettings = loadLocalSettings();
-          setSettings(localSettings);
+          console.warn('⚠️ Backend fetch failed:', backendError.message);
+          const defaultSettings = getDefaultSettings();
+          setSettings(defaultSettings);
         }
       } else {
-        // Use local settings
-        console.log('🔐 Using local settings - backend not available or not authenticated');
-        const localSettings = loadLocalSettings();
-        setSettings(localSettings);
+        console.log('🔐 Using default settings');
+        const defaultSettings = getDefaultSettings();
+        setSettings(defaultSettings);
       }
     } catch (err) {
       console.error('Error fetching settings:', err);
       setError(err.message);
-      
-      // Fallback to local settings
-      const localSettings = loadLocalSettings();
-      setSettings(localSettings);
+      const defaultSettings = getDefaultSettings();
+      setSettings(defaultSettings);
     } finally {
       setLoading(false);
     }
   };
 
-  // Update settings (backend or local) - FIXED VERSION
   const updateSettings = async (section, sectionData) => {
     try {
       setError(null);
       const authenticated = checkAuthentication();
       const backendAvailable = await checkBackendAvailability();
 
-      console.log('🔄 Update settings conditions:', {
-        section,
-        sectionData,
-        authenticated,
-        backendAvailable
-      });
-
-      let updatedSettings;
-
       if (authenticated && backendAvailable) {
-        // Try to update backend
         try {
-          console.log(`🔄 Updating section '${section}' in backend...`, sectionData);
+          // If updating profile and the client included a base64 `profilePhoto`,
+          // upload it first and replace with `profilePhotoUrl` to avoid large
+          // payloads in the settings API.
+          const profilePayload = (section === 'profile' && sectionData) ? { ...sectionData } : null;
+          if (profilePayload && profilePayload.profilePhoto) {
+            const photo = profilePayload.profilePhoto;
+            const looksLikeBase64 = (typeof photo === 'string') && (photo.startsWith('data:image') || photo.length > 1000);
+            if (looksLikeBase64) {
+              try {
+                const uploadResp = await fetch('http://localhost:5000/api/upload/profile-photo', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ imageBase64: photo })
+                });
+
+                const uploadJson = await uploadResp.json();
+                if (uploadResp.ok && uploadJson && uploadJson.success && uploadJson.url) {
+                  // Replace with URL and remove raw base64
+                  sectionData = { ...sectionData, profilePhotoUrl: uploadJson.url };
+                  delete sectionData.profilePhoto;
+                } else {
+                  console.warn('Image upload failed:', uploadJson);
+                  return { success: false, error: uploadJson.message || 'Image upload failed' };
+                }
+              } catch (uploadErr) {
+                console.error('Image upload error:', uploadErr);
+                return { success: false, error: 'Image upload error' };
+              }
+            }
+          }
+
           const response = await settingsService.updateSection(section, sectionData);
           
           if (response && response.success) {
-            updatedSettings = response.data;
+            let updatedSettings = response.data;
+            
+            if (updatedSettings.profile) {
+              updatedSettings.profile.email = getCurrentUserEmail();
+              updatedSettings.profile.name = getCurrentUserName();
+            }
+            
             const ensuredSettings = ensureSettingsStructure(updatedSettings);
             setSettings(ensuredSettings);
-            console.log('✅ Settings updated in backend:', ensuredSettings);
-            
-            // Also update localStorage
-            saveLocalSettings(ensuredSettings);
-            return { success: true, data: ensuredSettings, source: 'backend' };
+            console.log('✅ Settings updated in backend');
+            return { success: true, data: ensuredSettings };
           } else {
-            throw new Error(response?.message || 'Backend update failed');
+            throw new Error('Backend update failed');
           }
         } catch (backendError) {
-          console.warn('⚠️ Backend update failed, saving locally:', backendError.message);
-          // Fallback to local storage
-          const currentSettings = settings || loadLocalSettings();
-          updatedSettings = mergeSettings(currentSettings, section, sectionData);
-          const result = saveLocalSettings(updatedSettings);
-          return { ...result, source: 'local' };
+          console.warn('⚠️ Backend update failed:', backendError.message);
+          return { success: false, error: backendError.message };
         }
       } else {
-        // Update local storage only
-        console.log('🔐 Saving to local storage only - backend not available');
-        const currentSettings = settings || loadLocalSettings();
-        updatedSettings = mergeSettings(currentSettings, section, sectionData);
-        const result = saveLocalSettings(updatedSettings);
-        return { ...result, source: 'local' };
+        return { success: false, error: 'Not authenticated or backend unavailable' };
       }
     } catch (err) {
-      const errorMsg = err.message || 'Failed to update settings';
       console.error('Update settings error:', err);
-      setError(errorMsg);
-      return { success: false, error: errorMsg, source: 'error' };
+      setError(err.message);
+      return { success: false, error: err.message };
     }
   };
 
-  // Reset settings
-  const resetSettings = async () => {
+  const resetSettings = async (tenantId) => {
     try {
       setError(null);
       const authenticated = checkAuthentication();
       const backendAvailable = await checkBackendAvailability();
-      const defaultSettings = getDefaultSettings();
 
       if (authenticated && backendAvailable) {
         try {
-          console.log('🔄 Resetting settings in backend...');
-          const response = await settingsService.resetSettings();
+          const response = await settingsService.resetSettings(tenantId);
           
           if (response && response.success) {
             const ensuredSettings = ensureSettingsStructure(response.data);
             setSettings(ensuredSettings);
-            console.log('✅ Settings reset in backend');
-            
-            // Also update localStorage
-            saveLocalSettings(ensuredSettings);
-            return { success: true, data: ensuredSettings, source: 'backend' };
+            return { success: true, data: ensuredSettings };
           } else {
-            throw new Error(response?.message || 'Backend reset failed');
+            throw new Error('Backend reset failed');
           }
         } catch (backendError) {
-          console.warn('⚠️ Backend reset failed, resetting locally:', backendError.message);
-          return { ...saveLocalSettings(defaultSettings), source: 'local' };
+          console.warn('⚠️ Backend reset failed:', backendError.message);
+          return { success: false, error: backendError.message };
         }
       } else {
-        console.log('🔐 Resetting local settings');
-        return { ...saveLocalSettings(defaultSettings), source: 'local' };
+        return { success: false, error: 'Not authenticated or backend unavailable' };
       }
     } catch (err) {
-      const errorMsg = err.message || 'Failed to reset settings';
       console.error('Reset settings error:', err);
-      setError(errorMsg);
-      return { success: false, error: errorMsg, source: 'error' };
+      setError(err.message);
+      return { success: false, error: err.message };
     }
   };
 
-  // Update entire settings object
-  const updateAllSettings = async (newSettings) => {
-    try {
-      setError(null);
-      const authenticated = checkAuthentication();
-      const backendAvailable = await checkBackendAvailability();
-
-      if (authenticated && backendAvailable) {
-        try {
-          console.log('🔄 Updating all settings in backend...');
-          const response = await settingsService.updateSettings(newSettings);
-          
-          if (response && response.success) {
-            const ensuredSettings = ensureSettingsStructure(response.data);
-            setSettings(ensuredSettings);
-            console.log('✅ All settings updated in backend');
-            
-            // Also update localStorage
-            saveLocalSettings(ensuredSettings);
-            return { success: true, data: ensuredSettings, source: 'backend' };
-          } else {
-            throw new Error(response?.message || 'Backend update failed');
-          }
-        } catch (backendError) {
-          console.warn('⚠️ Backend update failed, saving locally:', backendError.message);
-          const ensuredSettings = ensureSettingsStructure(newSettings);
-          return { ...saveLocalSettings(ensuredSettings), source: 'local' };
-        }
-      } else {
-        console.log('🔐 Saving all settings to local storage');
-        const ensuredSettings = ensureSettingsStructure(newSettings);
-        return { ...saveLocalSettings(ensuredSettings), source: 'local' };
-      }
-    } catch (err) {
-      const errorMsg = err.message || 'Failed to update all settings';
-      console.error('Update all settings error:', err);
-      setError(errorMsg);
-      return { success: false, error: errorMsg, source: 'error' };
-    }
-  };
-
-  // Clear error state
-  const clearError = () => {
-    setError(null);
-  };
-
-  // Initial settings load
   useEffect(() => {
     fetchSettings();
+    
+    const handleLogin = () => {
+      console.log('🔔 Login event detected, refreshing settings');
+      fetchSettings();
+    };
+    
+    window.addEventListener('userLoggedIn', handleLogin);
+    
+    return () => {
+      window.removeEventListener('userLoggedIn', handleLogin);
+    };
   }, []);
 
   const value = {
-    settings: settings || getDefaultSettings(), // Always return proper settings object
+    settings: settings || getDefaultSettings(),
     loading,
     error,
     isAuthenticated,
     backendAvailable,
     updateSettings,
-    updateAllSettings,
     resetSettings,
     refetchSettings: fetchSettings,
     checkAuthentication,
-    clearError
+    clearError: () => setError(null)
   };
 
   return (

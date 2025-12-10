@@ -5,8 +5,10 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer,
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend
 } from 'recharts';
+import { useLanguage } from '../context/LanguageContext';
 
 const Investment = ({ userSession }) => {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [marketData, setMarketData] = useState(null);
   const [predictions, setPredictions] = useState(null);

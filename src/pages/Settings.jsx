@@ -1,4 +1,4 @@
-// src/pages/settings.jsx
+// src/pages/settings.jsx - COMPLETE FIXED VERSION (MongoDB Database Storage)
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -6,7 +6,7 @@ import { useSettings } from '../context/SettingsContext';
 import './Settings.css';
 
 const Settings = () => {
-  const { settings, updateSettings, resetSettings, loading, error } = useSettings();
+  const { settings, updateSettings, resetSettings, loading, error, refetchSettings, checkAuthentication, isAuthenticated } = useSettings();
   const { t, language, updateLanguage } = useLanguage();
   const { theme, updateTheme, updateThemeSettings } = useTheme();
   const [activeTab, setActiveTab] = useState('profile');
@@ -16,7 +16,7 @@ const Settings = () => {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showSignoutModal, setShowSignoutModal] = useState(false);
   const [showTwoFactorModal, setShowTwoFactorModal] = useState(false);
-  const [autoShowTwoFactorModal, setAutoShowTwoFactorModal] = useState(false); // NEW: For auto popup
+  const [autoShowTwoFactorModal, setAutoShowTwoFactorModal] = useState(false);
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -38,9 +38,37 @@ const Settings = () => {
     lastVerification: null
   });
   const [isChecking2FA, setIsChecking2FA] = useState(true);
-  const [hasAutoShown2FA, setHasAutoShown2FA] = useState(false); // NEW: Prevent multiple auto-shows
+  const [hasAutoShown2FA, setHasAutoShown2FA] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
+  const [currentUserName, setCurrentUserName] = useState('');
 
-  // ✅ Get auth headers
+  // ✅ Get current user email from localStorage (always up-to-date)
+  const getCurrentUserEmail = () => {
+    const emailFromStorage = localStorage.getItem('userEmail');
+    const emailFromSettings = settings?.profile?.email;
+    return emailFromStorage || emailFromSettings || '';
+  };
+
+  // ✅ Get current user name from localStorage
+  const getCurrentUserName = () => {
+    const nameFromStorage = localStorage.getItem('userName');
+    const nameFromSettings = settings?.profile?.name;
+    return nameFromStorage || nameFromSettings || '';
+  };
+
+  // ✅ Get tenant ID
+  const getTenantId = () => {
+    let tenantId = localStorage.getItem('tenantId') || localStorage.getItem('userId');
+    
+    if (!tenantId) {
+      tenantId = 'tenant_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('tenantId', tenantId);
+    }
+    
+    return tenantId;
+  };
+
+  // ✅ Get auth headers for API calls
   const getAuthHeaders = () => {
     const token = localStorage.getItem('sessionToken') || localStorage.getItem('token') || localStorage.getItem('authToken');
     const tenantId = getTenantId();
@@ -57,36 +85,6 @@ const Settings = () => {
     return headers;
   };
 
-  // ✅ Get tenant ID
-  const getTenantId = () => {
-    let tenantId = localStorage.getItem('tenantId') || localStorage.getItem('userId');
-    
-    if (!tenantId) {
-      tenantId = 'tenant_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      localStorage.setItem('tenantId', tenantId);
-    }
-    
-    return tenantId;
-  };
-
-  // ✅ Check authentication
-  const checkAuthentication = () => {
-    const token = localStorage.getItem('sessionToken') || localStorage.getItem('token') || localStorage.getItem('authToken');
-    const userId = localStorage.getItem('userId');
-    return !!(token && userId);
-  };
-
-  // ✅ Require authentication for actions
-  const requireAuthentication = (action = 'perform this action') => {
-    const isAuthenticated = checkAuthentication();
-    if (!isAuthenticated) {
-      setSaveStatus('❌ ' + (t('authenticationRequired') || 'Please log in to ' + action));
-      setTimeout(() => setSaveStatus(''), 5000);
-      return false;
-    }
-    return true;
-  };
-
   // ✅ Check 2FA status from backend
   const checkTwoFactorStatusFromBackend = async () => {
     try {
@@ -94,7 +92,6 @@ const Settings = () => {
       const token = localStorage.getItem('sessionToken') || localStorage.getItem('token');
       
       if (!token) {
-        console.log('No token found, skipping 2FA check');
         return {
           isEnabled: false,
           needsVerification: false,
@@ -110,7 +107,6 @@ const Settings = () => {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('2FA status from backend:', data);
         return {
           isEnabled: data.enabled || false,
           needsVerification: data.verificationRequired || false,
@@ -118,7 +114,6 @@ const Settings = () => {
           lastVerification: data.lastVerification || null
         };
       } else {
-        console.log('Failed to get 2FA status:', response.status);
         return {
           isEnabled: false,
           needsVerification: false,
@@ -127,7 +122,6 @@ const Settings = () => {
         };
       }
     } catch (error) {
-      console.log('Error checking 2FA status from backend:', error.message);
       return {
         isEnabled: false,
         needsVerification: false,
@@ -137,60 +131,43 @@ const Settings = () => {
     }
   };
 
-  // ✅ NEW: Check if we should auto-show 2FA modal
-  const shouldAutoShow2FAModal = (status) => {
-    if (!status.isEnabled) return false;
-    if (!status.needsVerification) return false;
-    
-    // Check if we've already shown it in this session
-    const hasShownInSession = sessionStorage.getItem('2FAAutoShown');
-    if (hasShownInSession) return false;
-    
-    // Check if it's actually overdue
-    if (status.nextVerificationDate) {
-      const nextVerification = new Date(status.nextVerificationDate);
-      const now = new Date();
-      return now >= nextVerification;
-    }
-    
-    return status.needsVerification;
-  };
-
   // ✅ Initialize local settings and check 2FA status
   useEffect(() => {
     const initializeSettings = async () => {
       if (settings) {
+        console.log('🔧 Initializing settings from context:', settings.profile?.email);
+        
         const initialSettings = JSON.parse(JSON.stringify(settings));
         setLocalSettings(initialSettings);
+        
+        const userEmail = getCurrentUserEmail();
+        const userName = getCurrentUserName();
+        
+        setCurrentUserEmail(userEmail);
+        setCurrentUserName(userName);
+        
+        console.log('🔧 Current user from localStorage - Email:', userEmail, 'Name:', userName);
+        
+        if (userEmail && initialSettings.profile?.email !== userEmail) {
+          initialSettings.profile.email = userEmail;
+        }
+        
+        if (userName && initialSettings.profile?.name !== userName) {
+          initialSettings.profile.name = userName;
+        }
         
         if (initialSettings.profile?.profilePhoto) {
           setImagePreview(initialSettings.profile.profilePhoto);
         }
         
-        // Always check 2FA status from backend on initialization
+        // Check 2FA status from backend
         setIsChecking2FA(true);
         try {
           const backend2FAStatus = await checkTwoFactorStatusFromBackend();
-          console.log('Backend 2FA status on init:', backend2FAStatus);
           
           setTwoFactorStatus(backend2FAStatus);
           setRequires2FAVerification(backend2FAStatus.needsVerification);
           
-          // Check if we should auto-show the 2FA modal
-          if (shouldAutoShow2FAModal(backend2FAStatus) && !hasAutoShown2FA) {
-            console.log('Auto-showing 2FA verification modal');
-            setAutoShowTwoFactorModal(true);
-            setTwoFactorData({
-              step: 'verify-pin',
-              pin: '',
-              confirmPin: ''
-            });
-            setHasAutoShown2FA(true);
-            // Mark as shown in session storage
-            sessionStorage.setItem('2FAAutoShown', 'true');
-          }
-          
-          // Update local settings to match backend
           if (initialSettings.privacy?.twoFactorAuth !== backend2FAStatus.isEnabled) {
             const updatedSettings = {
               ...initialSettings,
@@ -201,7 +178,6 @@ const Settings = () => {
             };
             setLocalSettings(updatedSettings);
             
-            // Also store in localStorage for quick access
             localStorage.setItem('twoFactorEnabled', backend2FAStatus.isEnabled.toString());
             if (backend2FAStatus.isEnabled) {
               localStorage.setItem('last2FACheck', new Date().toISOString());
@@ -218,14 +194,13 @@ const Settings = () => {
     initializeSettings();
   }, [settings]);
 
-  // ✅ Check 2FA status when privacy tab is active or when 2FA is toggled
+  // ✅ Check 2FA status when privacy tab is active
   useEffect(() => {
     const check2FAStatus = async () => {
-      if ((activeTab === 'privacy' || twoFactorLoading) && checkAuthentication()) {
+      if ((activeTab === 'privacy' || twoFactorLoading) && isAuthenticated) {
         try {
           const headers = getAuthHeaders();
           
-          // Check verification requirement
           const verificationResponse = await fetch('http://localhost:5000/api/two-factor/verification-required', {
             method: 'GET',
             headers: headers
@@ -234,29 +209,15 @@ const Settings = () => {
           if (verificationResponse.ok) {
             const verificationData = await verificationResponse.json();
             setRequires2FAVerification(verificationData.required || false);
-            
-            // NEW: Auto-show modal if verification is required
-            if (verificationData.required && !hasAutoShown2FA && !autoShowTwoFactorModal) {
-              console.log('Verification required, auto-showing modal');
-              setAutoShowTwoFactorModal(true);
-              setTwoFactorData({
-                step: 'verify-pin',
-                pin: '',
-                confirmPin: ''
-              });
-              setHasAutoShown2FA(true);
-              sessionStorage.setItem('2FAAutoShown', 'true');
-            }
           }
           
-          // Get full 2FA status
           const statusResponse = await fetch('http://localhost:5000/api/two-factor/status', {
             method: 'GET',
             headers: headers
           });
 
           if (statusResponse.ok) {
-            const statusData = await response.json();
+            const statusData = await statusResponse.json();
             const newStatus = {
               isEnabled: statusData.enabled || false,
               needsVerification: statusData.verificationRequired || false,
@@ -266,38 +227,18 @@ const Settings = () => {
             
             setTwoFactorStatus(newStatus);
             
-            // NEW: Auto-show modal if needed
-            if (shouldAutoShow2FAModal(newStatus) && !hasAutoShown2FA && !autoShowTwoFactorModal) {
-              console.log('Auto-showing 2FA modal from status check');
-              setAutoShowTwoFactorModal(true);
-              setTwoFactorData({
-                step: 'verify-pin',
-                pin: '',
-                confirmPin: ''
-              });
-              setHasAutoShown2FA(true);
-              sessionStorage.setItem('2FAAutoShown', 'true');
-            }
-            
-            // Update local settings if different
             if (localSettings && localSettings.privacy?.twoFactorAuth !== newStatus.isEnabled) {
               updateLocalSetting('privacy', 'twoFactorAuth', newStatus.isEnabled);
             }
           }
         } catch (error) {
-          console.log('Error checking 2FA status in effect:', error.message);
+          console.log('Error checking 2FA status:', error.message);
         }
       }
     };
 
     check2FAStatus();
-  }, [activeTab, twoFactorLoading, localSettings]);
-
-  // ✅ NEW: Handle auto-show modal close
-  const handleAutoModalClose = () => {
-    setAutoShowTwoFactorModal(false);
-    // Don't reset hasAutoShown2FA so we don't show it again
-  };
+  }, [activeTab, twoFactorLoading, localSettings, isAuthenticated]);
 
   // ✅ Update local setting
   const updateLocalSetting = (section, key, value) => {
@@ -311,9 +252,7 @@ const Settings = () => {
         }
       };
       
-      // Special handling for 2FA to ensure consistency
       if (section === 'privacy' && key === 'twoFactorAuth') {
-        // Update twoFactorStatus to match UI
         setTwoFactorStatus(prevStatus => ({
           ...prevStatus,
           isEnabled: value
@@ -324,29 +263,46 @@ const Settings = () => {
     });
   };
 
-  // ✅ Handle save settings
+  // ✅ Handle save settings - DATABASE ONLY
   const handleSave = async (section) => {
     if (!localSettings || !localSettings[section]) {
-      setSaveStatus('❌ ' + (t('noSettingsToSave') || 'No settings to save'));
+      setSaveStatus('❌ No settings to save');
       setTimeout(() => setSaveStatus(''), 3000);
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setSaveStatus('❌ Please log in to save settings to MongoDB database');
+      setTimeout(() => setSaveStatus(''), 5000);
       return;
     }
 
     setSaving(true);
     
-    const settingsData = {
-      ...localSettings[section],
-      tenantId: getTenantId()
-    };
+    const settingsData = { ...localSettings[section] };
     
-    const result = await updateSettings(section, settingsData);
-    setSaving(false);
+    if (section === 'profile') {
+      const currentEmail = getCurrentUserEmail();
+      if (currentEmail) {
+        settingsData.email = currentEmail;
+      }
+    }
     
-    if (result.success) {
-      setSaveStatus('✅ ' + (t('settingsSaved') || 'Settings saved successfully!'));
-      setTimeout(() => setSaveStatus(''), 3000);
-    } else {
-      setSaveStatus(`❌ ${result.error || (t('saveFailed') || 'Failed to save')}`);
+    console.log('💾 Saving to MongoDB Database - Section:', section, 'Data:', settingsData);
+    
+    try {
+      const result = await updateSettings(section, settingsData);
+      
+      if (result.success) {
+        setSaveStatus('✅ Settings saved to MongoDB database!');
+        await refetchSettings();
+      } else {
+        setSaveStatus(`❌ Database Error: ${result.error || 'Failed to save to database'}`);
+      }
+    } catch (error) {
+      setSaveStatus(`❌ Database Connection Error: ${error.message}`);
+    } finally {
+      setSaving(false);
       setTimeout(() => setSaveStatus(''), 5000);
     }
   };
@@ -354,17 +310,15 @@ const Settings = () => {
   // ✅ Send notification email
   const sendNotificationEmail = async (type) => {
     try {
-      if (!checkAuthentication()) {
-        console.log('User not authenticated, skipping notification email');
+      if (!isAuthenticated) {
         return;
       }
 
       const headers = getAuthHeaders();
-      const userEmail = localStorage.getItem('userEmail');
-      const userName = localStorage.getItem('userName') || 'User';
+      const userEmail = getCurrentUserEmail();
+      const userName = getCurrentUserName();
       
       if (!userEmail) {
-        console.log('No user email found for notification');
         return;
       }
 
@@ -383,8 +337,6 @@ const Settings = () => {
       
       if (data.success) {
         console.log('✅ Notification email sent successfully');
-      } else {
-        console.log('❌ Failed to send notification email:', data.message);
       }
     } catch (error) {
       console.log('Error sending notification email:', error.message);
@@ -395,26 +347,27 @@ const Settings = () => {
   const handleLanguageChange = async (newLanguage) => {
     if (!localSettings || saving) return;
     
+    if (!isAuthenticated) {
+      setSaveStatus('❌ Please log in to change language');
+      setTimeout(() => setSaveStatus(''), 5000);
+      return;
+    }
+
     setSaving(true);
     
     try {
-      // Update local state
       updateLocalSetting('language', 'appLanguage', newLanguage);
       updateLocalSetting('language', 'locale', newLanguage);
       
-      // Update language context
       const languageResult = await updateLanguage(newLanguage);
       
       if (languageResult.success) {
-        // Prepare updated settings
         const updatedLanguageSettings = {
           ...localSettings.language,
           appLanguage: newLanguage,
-          locale: newLanguage,
-          tenantId: getTenantId()
+          locale: newLanguage
         };
         
-        // Save to backend
         const settingsResult = await updateSettings('language', updatedLanguageSettings);
         
         if (settingsResult.success) {
@@ -434,14 +387,15 @@ const Settings = () => {
           };
           
           const languageName = languageNames[newLanguage] || newLanguage;
-          setSaveStatus(`✅ ${t('languageChanged') || 'Language changed to'} ${languageName}!`);
+          setSaveStatus(`✅ Language changed to ${languageName}!`);
+          await refetchSettings();
         }
       } else {
-        setSaveStatus('❌ ' + (t('languageChangeFailed') || 'Failed to change language'));
+        setSaveStatus('❌ Failed to change language');
       }
     } catch (error) {
       console.log('Language change error:', error);
-      setSaveStatus('❌ ' + (t('languageChangeError') || 'Error changing language'));
+      setSaveStatus('❌ Error changing language');
     } finally {
       setSaving(false);
       setTimeout(() => setSaveStatus(''), 3000);
@@ -452,38 +406,39 @@ const Settings = () => {
   const handleCurrencyChange = async (newCurrency) => {
     if (!localSettings || saving) return;
     
+    if (!isAuthenticated) {
+      setSaveStatus('❌ Please log in to change currency');
+      setTimeout(() => setSaveStatus(''), 5000);
+      return;
+    }
+
     setSaving(true);
     
     try {
-      // Update local state
       updateLocalSetting('language', 'currency', newCurrency);
       
-      // Prepare updated settings
       const updatedLanguageSettings = {
         ...localSettings.language,
-        currency: newCurrency,
-        tenantId: getTenantId()
+        currency: newCurrency
       };
       
-      // Save to backend
       const result = await updateSettings('language', updatedLanguageSettings);
       
       if (result.success) {
-        setSaveStatus(`✅ ${t('currencyChanged') || 'Currency changed to'} ${newCurrency}!`);
-        
-        // Store in localStorage
+        setSaveStatus(`✅ Currency changed to ${newCurrency}!`);
         localStorage.setItem('userCurrency', newCurrency);
         
-        // Dispatch event
         window.dispatchEvent(new CustomEvent('currencyChanged', {
           detail: { currency: newCurrency }
         }));
+        
+        await refetchSettings();
       } else {
-        setSaveStatus('❌ ' + (t('currencyChangeFailed') || 'Failed to change currency'));
+        setSaveStatus('❌ Failed to change currency');
       }
     } catch (error) {
       console.log('Currency change error:', error);
-      setSaveStatus('❌ ' + (t('currencyChangeError') || 'Error changing currency'));
+      setSaveStatus('❌ Error changing currency');
     } finally {
       setSaving(false);
       setTimeout(() => setSaveStatus(''), 3000);
@@ -494,38 +449,39 @@ const Settings = () => {
   const handleTimezoneChange = async (newTimezone) => {
     if (!localSettings || saving) return;
     
+    if (!isAuthenticated) {
+      setSaveStatus('❌ Please log in to change timezone');
+      setTimeout(() => setSaveStatus(''), 5000);
+      return;
+    }
+
     setSaving(true);
     
     try {
-      // Update local state
       updateLocalSetting('language', 'timezone', newTimezone);
       
-      // Prepare updated settings
       const updatedLanguageSettings = {
         ...localSettings.language,
-        timezone: newTimezone,
-        tenantId: getTenantId()
+        timezone: newTimezone
       };
       
-      // Save to backend
       const result = await updateSettings('language', updatedLanguageSettings);
       
       if (result.success) {
-        setSaveStatus(`✅ ${t('timezoneChanged') || 'Timezone changed to'} ${newTimezone}!`);
-        
-        // Store in localStorage
+        setSaveStatus(`✅ Timezone changed to ${newTimezone}!`);
         localStorage.setItem('userTimezone', newTimezone);
         
-        // Dispatch event
         window.dispatchEvent(new CustomEvent('timezoneChanged', {
           detail: { timezone: newTimezone }
         }));
+        
+        await refetchSettings();
       } else {
-        setSaveStatus('❌ ' + (t('timezoneChangeFailed') || 'Failed to change timezone'));
+        setSaveStatus('❌ Failed to change timezone');
       }
     } catch (error) {
       console.log('Timezone change error:', error);
-      setSaveStatus('❌ ' + (t('timezoneChangeError') || 'Error changing timezone'));
+      setSaveStatus('❌ Error changing timezone');
     } finally {
       setSaving(false);
       setTimeout(() => setSaveStatus(''), 3000);
@@ -536,41 +492,43 @@ const Settings = () => {
   const handleThemeChange = async (newTheme) => {
     if (!localSettings || saving) return;
     
-    // Update local state
+    if (!isAuthenticated) {
+      setSaveStatus('❌ Please log in to change theme');
+      setTimeout(() => setSaveStatus(''), 5000);
+      return;
+    }
+
     updateLocalSetting('theme', 'mode', newTheme);
     
     setSaving(true);
     
     try {
-      // Update theme context
       updateTheme(newTheme);
       
-      // Prepare updated settings
       const updatedThemeSettings = {
         ...localSettings.theme,
-        mode: newTheme,
-        tenantId: getTenantId()
+        mode: newTheme
       };
       
-      // Save to backend
       const result = await updateSettings('theme', updatedThemeSettings);
       
       if (result.success) {
-        setSaveStatus(`✅ ${t('themeChanged') || 'Theme changed to'} ${newTheme}!`);
+        setSaveStatus(`✅ Theme changed to ${newTheme}!`);
         
-        // Update theme context with all settings
         updateThemeSettings({
           mode: newTheme,
           primaryColor: updatedThemeSettings.primaryColor,
           fontSize: updatedThemeSettings.fontSize,
           fontFamily: updatedThemeSettings.fontFamily
         });
+        
+        await refetchSettings();
       } else {
-        setSaveStatus('❌ ' + (t('themeChangeFailed') || 'Failed to change theme'));
+        setSaveStatus('❌ Failed to change theme');
       }
     } catch (error) {
       console.log('Theme change error:', error);
-      setSaveStatus('❌ ' + (t('themeChangeError') || 'Error changing theme'));
+      setSaveStatus('❌ Error changing theme');
     } finally {
       setSaving(false);
       setTimeout(() => setSaveStatus(''), 3000);
@@ -581,10 +539,14 @@ const Settings = () => {
   const handlePrimaryColorChange = async (color) => {
     if (!localSettings || saving) return;
     
-    // Update local state
+    if (!isAuthenticated) {
+      setSaveStatus('❌ Please log in to change color');
+      setTimeout(() => setSaveStatus(''), 5000);
+      return;
+    }
+
     updateLocalSetting('theme', 'primaryColor', color);
     
-    // Update theme context
     updateThemeSettings({
       mode: theme,
       primaryColor: color,
@@ -592,25 +554,24 @@ const Settings = () => {
       fontFamily: localSettings.theme?.fontFamily
     });
     
-    // Auto-save
     setSaving(true);
     try {
       const updatedThemeSettings = {
         ...localSettings.theme,
-        primaryColor: color,
-        tenantId: getTenantId()
+        primaryColor: color
       };
       
       const result = await updateSettings('theme', updatedThemeSettings);
       
       if (result.success) {
-        setSaveStatus(`✅ ${t('colorChanged') || 'Primary color changed!'}`);
+        setSaveStatus(`✅ Primary color changed!`);
+        await refetchSettings();
       } else {
-        setSaveStatus('❌ ' + (t('colorChangeFailed') || 'Failed to save color'));
+        setSaveStatus('❌ Failed to save color');
       }
     } catch (error) {
       console.log('Color change error:', error);
-      setSaveStatus('❌ ' + (t('colorChangeError') || 'Error changing color'));
+      setSaveStatus('❌ Error changing color');
     } finally {
       setSaving(false);
       setTimeout(() => setSaveStatus(''), 2000);
@@ -621,10 +582,14 @@ const Settings = () => {
   const handleFontSizeChange = async (size) => {
     if (!localSettings || saving) return;
     
-    // Update local state
+    if (!isAuthenticated) {
+      setSaveStatus('❌ Please log in to change font size');
+      setTimeout(() => setSaveStatus(''), 5000);
+      return;
+    }
+
     updateLocalSetting('theme', 'fontSize', size);
     
-    // Update theme context
     updateThemeSettings({
       mode: theme,
       primaryColor: localSettings.theme?.primaryColor,
@@ -632,25 +597,24 @@ const Settings = () => {
       fontFamily: localSettings.theme?.fontFamily
     });
     
-    // Auto-save
     setSaving(true);
     try {
       const updatedThemeSettings = {
         ...localSettings.theme,
-        fontSize: size,
-        tenantId: getTenantId()
+        fontSize: size
       };
       
       const result = await updateSettings('theme', updatedThemeSettings);
       
       if (result.success) {
-        setSaveStatus(`✅ ${t('fontSizeChanged') || 'Font size changed!'}`);
+        setSaveStatus(`✅ Font size changed!`);
+        await refetchSettings();
       } else {
-        setSaveStatus('❌ ' + (t('fontSizeChangeFailed') || 'Failed to save font size'));
+        setSaveStatus('❌ Failed to save font size');
       }
     } catch (error) {
       console.log('Font size change error:', error);
-      setSaveStatus('❌ ' + (t('fontSizeChangeError') || 'Error changing font size'));
+      setSaveStatus('❌ Error changing font size');
     } finally {
       setSaving(false);
       setTimeout(() => setSaveStatus(''), 2000);
@@ -661,10 +625,14 @@ const Settings = () => {
   const handleFontFamilyChange = async (family) => {
     if (!localSettings || saving) return;
     
-    // Update local state
+    if (!isAuthenticated) {
+      setSaveStatus('❌ Please log in to change font family');
+      setTimeout(() => setSaveStatus(''), 5000);
+      return;
+    }
+
     updateLocalSetting('theme', 'fontFamily', family);
     
-    // Update theme context
     updateThemeSettings({
       mode: theme,
       primaryColor: localSettings.theme?.primaryColor,
@@ -672,25 +640,24 @@ const Settings = () => {
       fontFamily: family
     });
     
-    // Auto-save
     setSaving(true);
     try {
       const updatedThemeSettings = {
         ...localSettings.theme,
-        fontFamily: family,
-        tenantId: getTenantId()
+        fontFamily: family
       };
       
       const result = await updateSettings('theme', updatedThemeSettings);
       
       if (result.success) {
-        setSaveStatus(`✅ ${t('fontFamilyChanged') || 'Font family changed!'}`);
+        setSaveStatus(`✅ Font family changed!`);
+        await refetchSettings();
       } else {
-        setSaveStatus('❌ ' + (t('fontFamilyChangeFailed') || 'Failed to save font family'));
+        setSaveStatus('❌ Failed to save font family');
       }
     } catch (error) {
       console.log('Font family change error:', error);
-      setSaveStatus('❌ ' + (t('fontFamilyChangeError') || 'Error changing font family'));
+      setSaveStatus('❌ Error changing font family');
     } finally {
       setSaving(false);
       setTimeout(() => setSaveStatus(''), 2000);
@@ -702,7 +669,7 @@ const Settings = () => {
     const file = e.target.files[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
-        setSaveStatus('❌ ' + (t('imageSizeError') || 'Image size should be less than 5MB'));
+        setSaveStatus('❌ Image size should be less than 5MB');
         setTimeout(() => setSaveStatus(''), 3000);
         return;
       }
@@ -720,18 +687,21 @@ const Settings = () => {
   // ✅ Password change
   const handlePasswordChange = async () => {
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setSaveStatus('❌ ' + (t('passwordsNotMatch') || 'Passwords do not match'));
+      setSaveStatus('❌ Passwords do not match');
       setTimeout(() => setSaveStatus(''), 3000);
       return;
     }
 
     if (passwordData.newPassword.length < 6) {
-      setSaveStatus('❌ ' + (t('passwordMinLength') || 'Password must be at least 6 characters'));
+      setSaveStatus('❌ Password must be at least 6 characters');
       setTimeout(() => setSaveStatus(''), 3000);
       return;
     }
 
-    if (!requireAuthentication('change your password')) {
+    if (!isAuthenticated) {
+      setSaveStatus('❌ Please log in to change password');
+      setTimeout(() => setSaveStatus(''), 5000);
+      setShowPasswordModal(false);
       return;
     }
 
@@ -753,9 +723,8 @@ const Settings = () => {
       setSaving(false);
 
       if (data.success) {
-        setSaveStatus('✅ ' + (t('passwordChanged') || 'Password changed successfully!'));
+        setSaveStatus('✅ Password changed successfully!');
         
-        // Send notification if enabled
         if (localSettings.notifications?.email) {
           await sendNotificationEmail('passwordChanged');
         }
@@ -769,23 +738,21 @@ const Settings = () => {
       }
     } catch (error) {
       setSaving(false);
-      setSaveStatus('❌ ' + (t('passwordChangeError') || 'Error changing password'));
+      setSaveStatus('❌ Error changing password');
       setTimeout(() => setSaveStatus(''), 3000);
     }
   };
 
-  // ✅ Two-factor authentication toggle handler - FIXED
+  // ✅ Two-factor authentication toggle handler
   const handleTwoFactorAuth = async (enable) => {
-    console.log('handleTwoFactorAuth called with enable:', enable, 'current status:', twoFactorStatus.isEnabled);
-    
-    if (!requireAuthentication('enable two-factor authentication')) {
-      // Revert UI change if not authenticated
+    if (!isAuthenticated) {
+      setSaveStatus('❌ Please log in to enable two-factor authentication');
+      setTimeout(() => setSaveStatus(''), 5000);
       updateLocalSetting('privacy', 'twoFactorAuth', !enable);
       return;
     }
 
     if (!enable) {
-      // Disable 2FA
       setTwoFactorLoading(true);
       try {
         const headers = getAuthHeaders();
@@ -799,10 +766,8 @@ const Settings = () => {
         });
 
         const data = await response.json();
-        console.log('Disable 2FA response:', data);
         
         if (data.success) {
-          // Update state immediately
           setTwoFactorStatus({
             isEnabled: false,
             needsVerification: false,
@@ -811,35 +776,31 @@ const Settings = () => {
           });
           setRequires2FAVerification(false);
           
-          // Update local settings
           updateLocalSetting('privacy', 'twoFactorAuth', false);
           
-          // Clear localStorage
           localStorage.removeItem('twoFactorEnabled');
           localStorage.removeItem('last2FACheck');
           
-          setSaveStatus('✅ ' + (t('twoFactorDisabled') || 'Two-factor authentication disabled!'));
+          setSaveStatus('✅ Two-factor authentication disabled!');
           
-          // Send notification if enabled
           if (localSettings.notifications?.email) {
             await sendNotificationEmail('twoFactorDisabled');
           }
+          
+          await refetchSettings();
         } else {
-          setSaveStatus('❌ ' + (data.message || t('twoFactorDisableFailed') || 'Failed to disable two-factor authentication'));
-          // Revert UI change
+          setSaveStatus('❌ ' + (data.message || 'Failed to disable two-factor authentication'));
           updateLocalSetting('privacy', 'twoFactorAuth', true);
         }
       } catch (error) {
         console.log('2FA disable error:', error);
-        setSaveStatus('❌ ' + (t('twoFactorDisableError') || 'Error disabling two-factor authentication'));
-        // Revert UI change
+        setSaveStatus('❌ Error disabling two-factor authentication');
         updateLocalSetting('privacy', 'twoFactorAuth', true);
       } finally {
         setTwoFactorLoading(false);
         setTimeout(() => setSaveStatus(''), 3000);
       }
     } else {
-      // Enable 2FA - show PIN setup modal
       setShowTwoFactorModal(true);
       setTwoFactorData({
         step: 'pin-setup',
@@ -852,14 +813,21 @@ const Settings = () => {
   // ✅ Setup PIN
   const setupPin = async () => {
     if (!twoFactorData.pin || twoFactorData.pin.length !== 6 || !/^\d+$/.test(twoFactorData.pin)) {
-      setSaveStatus('❌ ' + (t('pinMustBe6Digits') || 'PIN must be exactly 6 digits'));
+      setSaveStatus('❌ PIN must be exactly 6 digits');
       setTimeout(() => setSaveStatus(''), 3000);
       return;
     }
 
     if (twoFactorData.pin !== twoFactorData.confirmPin) {
-      setSaveStatus('❌ ' + (t('pinsNotMatch') || 'PINs do not match'));
+      setSaveStatus('❌ PINs do not match');
       setTimeout(() => setSaveStatus(''), 3000);
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setSaveStatus('❌ Please log in to setup PIN');
+      setTimeout(() => setSaveStatus(''), 5000);
+      setShowTwoFactorModal(false);
       return;
     }
 
@@ -877,10 +845,8 @@ const Settings = () => {
       });
 
       const data = await response.json();
-      console.log('Setup PIN response:', data);
       
       if (data.success) {
-        // Update state immediately
         const nextVerificationDate = data.nextVerificationDate ? new Date(data.nextVerificationDate) : new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
         
         setTwoFactorStatus({
@@ -891,15 +857,12 @@ const Settings = () => {
         });
         setRequires2FAVerification(false);
         
-        // Update local settings
         updateLocalSetting('privacy', 'twoFactorAuth', true);
         
-        // Store in localStorage
         localStorage.setItem('twoFactorEnabled', 'true');
         localStorage.setItem('last2FASetup', new Date().toISOString());
         localStorage.setItem('last2FACheck', new Date().toISOString());
         
-        // Send notification if enabled
         if (localSettings.notifications?.email) {
           await sendNotificationEmail('twoFactorEnabled');
         }
@@ -911,9 +874,10 @@ const Settings = () => {
           confirmPin: ''
         });
         
-        setSaveStatus('✅ ' + (t('twoFactorEnabled') || 'Two-factor authentication enabled with 6-digit PIN!'));
+        setSaveStatus('✅ Two-factor authentication enabled with 6-digit PIN!');
         
-        // Force refresh of 2FA status
+        await refetchSettings();
+        
         setTimeout(() => {
           checkTwoFactorStatusFromBackend().then(status => {
             setTwoFactorStatus(status);
@@ -921,12 +885,12 @@ const Settings = () => {
           });
         }, 500);
       } else {
-        setSaveStatus('❌ ' + (data.message || t('pinSetupFailed') || 'Failed to setup PIN'));
+        setSaveStatus('❌ ' + (data.message || 'Failed to setup PIN'));
         updateLocalSetting('privacy', 'twoFactorAuth', false);
       }
     } catch (error) {
       console.log('PIN setup error:', error);
-      setSaveStatus('❌ ' + (t('pinSetupError') || 'Error setting up PIN'));
+      setSaveStatus('❌ Error setting up PIN');
       updateLocalSetting('privacy', 'twoFactorAuth', false);
     } finally {
       setTwoFactorLoading(false);
@@ -936,11 +900,12 @@ const Settings = () => {
 
   // ✅ Handle verification
   const handleVerification = async () => {
-    if (!requireAuthentication('verify two-factor authentication')) {
+    if (!isAuthenticated) {
+      setSaveStatus('❌ Please log in to verify two-factor authentication');
+      setTimeout(() => setSaveStatus(''), 5000);
       return;
     }
 
-    // Show verification modal
     setShowTwoFactorModal(true);
     setTwoFactorData({
       step: 'verify-pin',
@@ -952,8 +917,14 @@ const Settings = () => {
   // ✅ Verify PIN for periodic verification
   const verifyPinForVerification = async () => {
     if (!twoFactorData.pin || twoFactorData.pin.length !== 6) {
-      setSaveStatus('❌ ' + (t('pinMustBe6Digits') || 'PIN must be exactly 6 digits'));
+      setSaveStatus('❌ PIN must be exactly 6 digits');
       setTimeout(() => setSaveStatus(''), 3000);
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setSaveStatus('❌ Please log in to verify PIN');
+      setTimeout(() => setSaveStatus(''), 5000);
       return;
     }
 
@@ -971,10 +942,8 @@ const Settings = () => {
       });
 
       const data = await response.json();
-      console.log('Verify PIN response:', data);
       
       if (data.success) {
-        // Update verification status
         const nextVerificationDate = data.nextVerificationDate ? new Date(data.nextVerificationDate) : new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
         
         setTwoFactorStatus(prev => ({
@@ -985,7 +954,6 @@ const Settings = () => {
         }));
         setRequires2FAVerification(false);
         
-        // Close both modals (regular and auto)
         setShowTwoFactorModal(false);
         setAutoShowTwoFactorModal(false);
         
@@ -995,24 +963,18 @@ const Settings = () => {
           confirmPin: ''
         });
         
-        setSaveStatus('✅ ' + (t('verificationSuccessful') || 'Verification successful!'));
+        setSaveStatus('✅ Verification successful!');
         
-        // Store verification timestamp
         localStorage.setItem('last2FAVerification', new Date().toISOString());
         localStorage.setItem('last2FACheck', new Date().toISOString());
         
-        // Force refresh of 2FA status
-        setTimeout(() => {
-          checkTwoFactorStatusFromBackend().then(status => {
-            setTwoFactorStatus(status);
-          });
-        }, 500);
+        await refetchSettings();
       } else {
-        setSaveStatus('❌ ' + (data.message || t('verificationFailed') || 'Verification failed'));
+        setSaveStatus('❌ ' + (data.message || 'Verification failed'));
       }
     } catch (error) {
       console.log('Verification error:', error);
-      setSaveStatus('❌ ' + (t('verificationError') || 'Error during verification'));
+      setSaveStatus('❌ Error during verification');
     } finally {
       setTwoFactorLoading(false);
       setTimeout(() => setSaveStatus(''), 3000);
@@ -1047,11 +1009,10 @@ const Settings = () => {
             console.log('Backend logout successful');
           }
         } catch (error) {
-          console.log('Backend logout failed, continuing with client-side cleanup');
+          console.log('Backend logout failed');
         }
       }
       
-      // Clear all data
       const itemsToRemove = [
         'sessionToken',
         'token',
@@ -1064,7 +1025,7 @@ const Settings = () => {
         'last2FAVerification',
         'userCurrency',
         'userTimezone',
-        '2FAAutoShown' // Clear the auto-shown flag
+        '2FAAutoShown'
       ];
       
       itemsToRemove.forEach(item => {
@@ -1072,7 +1033,6 @@ const Settings = () => {
         sessionStorage.removeItem(item);
       });
       
-      // Clear cookies
       document.cookie.split(";").forEach(function(c) {
         document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
       });
@@ -1080,7 +1040,7 @@ const Settings = () => {
       setSaving(false);
       setShowSignoutModal(false);
       
-      setSaveStatus('✅ ' + (t('signedOut') || 'Successfully signed out!'));
+      setSaveStatus('✅ Successfully signed out!');
       setTimeout(() => {
         window.location.href = '/login';
       }, 1000);
@@ -1088,29 +1048,36 @@ const Settings = () => {
     } catch (error) {
       console.log('Signout error:', error);
       setSaving(false);
-      setSaveStatus('❌ ' + (t('signoutError') || 'Error during signout'));
+      setSaveStatus('❌ Error during signout');
       setTimeout(() => setSaveStatus(''), 3000);
     }
   };
 
-  // ✅ Reset settings
+  // ✅ Reset settings - DATABASE ONLY
   const handleReset = async () => {
-    if (window.confirm('⚠️ ' + (t('resetConfirm') || 'Are you sure you want to reset all settings to default? This cannot be undone.'))) {
+    if (window.confirm('⚠️ Are you sure you want to reset all settings to default? This cannot be undone.')) {
+      if (!isAuthenticated) {
+        setSaveStatus('❌ Please log in to reset settings');
+        setTimeout(() => setSaveStatus(''), 5000);
+        return;
+      }
+
       setSaving(true);
       const result = await resetSettings(getTenantId());
       setSaving(false);
       
       if (result.success) {
-        setSaveStatus('✅ ' + (t('settingsReset') || 'Settings reset successfully!'));
+        setSaveStatus('✅ Settings reset successfully in MongoDB database!');
         
-        // Send notification if enabled
         if (localSettings.notifications?.email) {
           await sendNotificationEmail('settingsReset');
         }
         
+        await refetchSettings();
+        
         setTimeout(() => setSaveStatus(''), 3000);
       } else {
-        setSaveStatus('❌ ' + (t('resetError') || 'Error resetting settings'));
+        setSaveStatus('❌ Error resetting settings in database');
         setTimeout(() => setSaveStatus(''), 3000);
       }
     }
@@ -1118,7 +1085,9 @@ const Settings = () => {
 
   // ✅ Export data
   const handleExport = async () => {
-    if (!requireAuthentication('export your data')) {
+    if (!isAuthenticated) {
+      setSaveStatus('❌ Please log in to export your data');
+      setTimeout(() => setSaveStatus(''), 5000);
       return;
     }
 
@@ -1147,9 +1116,8 @@ const Settings = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-      setSaveStatus('✅ ' + (t('dataExported') || 'Data exported successfully!'));
+      setSaveStatus('✅ Data exported successfully from MongoDB database!');
       
-      // Send notification if enabled
       if (localSettings.notifications?.email) {
         await sendNotificationEmail('dataExported');
       }
@@ -1157,7 +1125,7 @@ const Settings = () => {
       setTimeout(() => setSaveStatus(''), 3000);
     } catch (error) {
       console.log('Export error:', error);
-      setSaveStatus('❌ ' + (t('exportError') || 'Error exporting data'));
+      setSaveStatus('❌ Error exporting data from database');
       setTimeout(() => setSaveStatus(''), 3000);
     }
   };
@@ -1166,7 +1134,8 @@ const Settings = () => {
     return (
       <div className="settings-loading">
         <div className="loader-spinner"></div>
-        <p>{t('loadingSettings') || 'Loading your settings...'}</p>
+        <p>Loading your settings from MongoDB database...</p>
+        <small>Please wait while we fetch your settings from the database</small>
       </div>
     );
   }
@@ -1175,40 +1144,68 @@ const Settings = () => {
     return (
       <div className="settings-error">
         <div className="error-icon">⚠️</div>
-        <h2>{t('loadSettingsFailed') || 'Failed to Load Settings'}</h2>
-        <p>{error}</p>
-        <button onClick={() => window.location.reload()} className="btn-save">
-          {t('reloadPage') || 'Reload Page'}
+        <h2>Failed to Load Settings</h2>
+        <p>MongoDB Database Error: {error}</p>
+        <p className="error-note">
+          ⚠️ Settings are stored in MongoDB database. Please check your:
+          <br />1. Internet connection
+          <br />2. Backend server (localhost:5000)
+          <br />3. MongoDB connection
+          <br />4. Authentication status
+        </p>
+        <button onClick={() => refetchSettings()} className="btn-save">
+          Retry Loading from Database
+        </button>
+        <button onClick={() => window.location.reload()} className="btn-secondary">
+          Reload Page
         </button>
       </div>
     );
   }
 
   const tabs = [
-    { id: 'profile', label: t('profile') || 'Profile', icon: '👤' },
-    { id: 'account', label: t('account') || 'Account', icon: '🏢' },
-    { id: 'theme', label: t('theme') || 'Theme', icon: '🎨' },
-    { id: 'notifications', label: t('notifications') || 'Notifications', icon: '🔔' },
-    { id: 'privacy', label: t('privacy') || 'Privacy', icon: '🔒' },
-    { id: 'appearance', label: t('appearance') || 'Appearance', icon: '✨' },
-    { id: 'language', label: t('language') || 'Language & Region', icon: '🌍' },
-    { id: 'performance', label: t('performance') || 'Performance', icon: '⚡' },
-    { id: 'accessibility', label: t('accessibility') || 'Accessibility', icon: '♿' },
-    { id: 'about', label: t('about') || 'About', icon: 'ℹ️' }
+    { id: 'profile', label: 'Profile', icon: '👤' },
+    { id: 'account', label: 'Account', icon: '🏢' },
+    { id: 'theme', label: 'Theme', icon: '🎨' },
+    { id: 'notifications', label: 'Notifications', icon: '🔔' },
+    { id: 'privacy', label: 'Privacy', icon: '🔒' },
+    { id: 'appearance', label: 'Appearance', icon: '✨' },
+    { id: 'language', label: 'Language & Region', icon: '🌍' },
+    { id: 'performance', label: 'Performance', icon: '⚡' },
+    { id: 'accessibility', label: 'Accessibility', icon: '♿' },
+    { id: 'about', label: 'About', icon: 'ℹ️' }
   ];
 
-  const userEmail = localStorage.getItem('userEmail') || localSettings.profile?.email || 'user@example.com';
+  const userEmail = getCurrentUserEmail();
+  const userName = getCurrentUserName();
 
   return (
     <div className="settings-container">
       <div className="settings-header">
         <div>
-          <h1>⚙️ {t('settings') || 'Settings'}</h1>
-          <p className="settings-subtitle">{t('settingsDescription') || 'Manage your account preferences and app behavior'}</p>
+          <h1>⚙️ Settings</h1>
+          <p className="settings-subtitle">Manage your account preferences and app behavior</p>
+          <div className="database-indicator">
+            <span className="db-badge">💾 MongoDB Database</span>
+            <small>
+              {isAuthenticated ? 
+                '✅ All settings are saved to MongoDB database' : 
+                '⚠️ Please log in to save settings to database'
+              }
+            </small>
+            {!isAuthenticated && (
+              <button 
+                onClick={() => window.location.href = '/login'}
+                className="btn-login-prompt"
+              >
+                🔑 Log In to Save to Database
+              </button>
+            )}
+          </div>
         </div>
         <div className="header-actions">
           {saveStatus && (
-            <div className={`save-status ${saveStatus.includes('❌') ? 'error' : ''}`}>
+            <div className={`save-status ${saveStatus.includes('❌') ? 'error' : 'success'}`}>
               {saveStatus}
             </div>
           )}
@@ -1217,10 +1214,10 @@ const Settings = () => {
             <button 
               className="btn-verify-2fa"
               onClick={handlePeriodicVerification}
-              title={t('verifyTwoFactor') || 'Verify two-factor authentication'}
+              title="Verify two-factor authentication"
               disabled={saving || twoFactorLoading}
             >
-              🛡️ {t('verifySecurity') || 'Verify Security'}
+              🛡️ Verify Security
             </button>
           )}
           
@@ -1228,9 +1225,9 @@ const Settings = () => {
             className="btn-signout"
             onClick={() => setShowSignoutModal(true)}
             disabled={saving}
-            title={t('signOut') || 'Sign out from your account'}
+            title="Sign out from your account"
           >
-            🚪 {t('signOut') || 'Sign Out'}
+            🚪 Sign Out
           </button>
         </div>
       </div>
@@ -1254,8 +1251,8 @@ const Settings = () => {
           {/* Profile Tab */}
           {activeTab === 'profile' && (
             <div className="settings-section">
-              <h2>👤 {t('profileSettings') || 'Profile Settings'}</h2>
-              <p className="section-description">{t('updateProfilePicture') || 'Update your profile picture and view your information'}</p>
+              <h2>👤 Profile Settings</h2>
+              <p className="section-description">Update your profile picture and view your information (Saved to MongoDB)</p>
               
               <div className="profile-header-section">
                 <div className="profile-image-container">
@@ -1265,7 +1262,7 @@ const Settings = () => {
                     ) : (
                       <div className="profile-image-placeholder">
                         <span className="profile-initials">
-                          {(localSettings.profile?.name || userEmail).charAt(0).toUpperCase()}
+                          {userName.charAt(0).toUpperCase()}
                         </span>
                       </div>
                     )}
@@ -1286,37 +1283,43 @@ const Settings = () => {
                     />
                   </div>
                   <div className="profile-image-info">
-                    <h3>{localSettings.profile?.name || t('user') || 'User'}</h3>
+                    <h3>{userName || 'User'}</h3>
                     <p className="profile-email">{userEmail}</p>
-                    <small>{t('clickToUpload') || 'Click on the camera icon to upload a new photo'}</small>
+                    <small>Click on the camera icon to upload a new photo</small>
                   </div>
                 </div>
               </div>
               
               <div className="setting-group">
-                <label>{t('displayName') || 'Display Name'}</label>
+                <label>Display Name</label>
                 <input
                   type="text"
-                  value={localSettings.profile?.name || ''}
-                  onChange={(e) => updateLocalSetting('profile', 'name', e.target.value)}
-                  placeholder={t('enterDisplayName') || "Enter your display name"}
+                  value={userName || ''}
+                  onChange={(e) => {
+                    const newVal = e.target.value;
+                    updateLocalSetting('profile', 'name', newVal);
+                    setCurrentUserName(newVal);
+                    localStorage.setItem('userName', newVal);
+                  }}
+                  placeholder="Enter your display name"
                   disabled={saving}
                 />
               </div>
               
               <div className="setting-group">
-                <label>{t('emailAddress') || 'Email Address'} ({t('readOnly') || 'Read Only'})</label>
+                <label>Email Address (Read Only)</label>
                 <input
                   type="email"
                   value={userEmail}
                   disabled
                   className="readonly-input"
+                  readOnly
                 />
-                <small>{t('emailCannotChange') || 'Email cannot be changed here. Contact support to update.'}</small>
+                <small>Email cannot be changed here. Contact support to update.</small>
               </div>
               
               <div className="setting-group">
-                <label>{t('phoneNumber') || 'Phone Number'}</label>
+                <label>Phone Number</label>
                 <input
                   type="tel"
                   value={localSettings.profile?.phone || ''}
@@ -1327,27 +1330,33 @@ const Settings = () => {
               </div>
               
               <div className="setting-group">
-                <label>{t('bio') || 'Bio'}</label>
+                <label>Bio</label>
                 <textarea
                   value={localSettings.profile?.bio || ''}
                   onChange={(e) => updateLocalSetting('profile', 'bio', e.target.value)}
-                  placeholder={t('tellAboutYourself') || "Tell us about yourself..."}
+                  placeholder="Tell us about yourself..."
                   rows="4"
                   disabled={saving}
                 />
               </div>
               
-              <button className="btn-save" onClick={() => handleSave('profile')} disabled={saving}>
-                {saving ? (t('saving') || 'Saving...') : '💾 ' + (t('saveProfile') || 'Save Profile')}
+              <button 
+                className="btn-save" 
+                onClick={() => handleSave('profile')} 
+                disabled={saving || !isAuthenticated}
+                title={!isAuthenticated ? "Please log in to save to database" : ""}
+              >
+                {saving ? '💾 Saving to MongoDB...' : '💾 Save Profile to MongoDB Database'}
               </button>
+              {!isAuthenticated && <small className="auth-warning">⚠️ Please log in to save to database</small>}
             </div>
           )}
 
           {/* Account Tab */}
           {activeTab === 'account' && (
             <div className="settings-section">
-              <h2>🏢 {t('accountType') || 'Account Type'}</h2>
-              <p className="section-description">{t('chooseAccountType') || 'Choose your account type based on your needs'}</p>
+              <h2>🏢 Account Type</h2>
+              <p className="section-description">Choose your account type based on your needs (Saved to MongoDB)</p>
               
               <div className="account-type-cards">
                 <div 
@@ -1355,13 +1364,13 @@ const Settings = () => {
                   onClick={() => updateLocalSetting('account', 'type', 'individual')}
                 >
                   <div className="account-card-icon">👤</div>
-                  <h3>{t('individual') || 'Individual'}</h3>
-                  <p>{t('individualDescription') || 'Perfect for personal finance management'}</p>
+                  <h3>Individual</h3>
+                  <p>Perfect for personal finance management</p>
                   <ul>
-                    <li>{t('singleUserAccess') || 'Single user access'}</li>
-                    <li>{t('personalBudgeting') || 'Personal budgeting tools'}</li>
-                    <li>{t('transactionTracking') || 'Transaction tracking'}</li>
-                    <li>{t('basicReports') || 'Basic reports'}</li>
+                    <li>Single user access</li>
+                    <li>Personal budgeting tools</li>
+                    <li>Transaction tracking</li>
+                    <li>Basic reports</li>
                   </ul>
                 </div>
 
@@ -1370,13 +1379,13 @@ const Settings = () => {
                   onClick={() => updateLocalSetting('account', 'type', 'family')}
                 >
                   <div className="account-card-icon">👨‍👩‍👧‍👦</div>
-                  <h3>{t('family') || 'Family'}</h3>
-                  <p>{t('familyDescription') || 'Share finances with family members'}</p>
+                  <h3>Family</h3>
+                  <p>Share finances with family members</p>
                   <ul>
-                    <li>{t('upTo5Members') || 'Up to 5 family members'}</li>
-                    <li>{t('sharedBudgets') || 'Shared budgets'}</li>
-                    <li>{t('individualProfiles') || 'Individual profiles'}</li>
-                    <li>{t('familyReports') || 'Family reports'}</li>
+                    <li>Up to 5 family members</li>
+                    <li>Shared budgets</li>
+                    <li>Individual profiles</li>
+                    <li>Family reports</li>
                   </ul>
                 </div>
 
@@ -1385,45 +1394,51 @@ const Settings = () => {
                   onClick={() => updateLocalSetting('account', 'type', 'business')}
                 >
                   <div className="account-card-icon">💼</div>
-                  <h3>{t('business') || 'Business'}</h3>
-                  <p>{t('businessDescription') || 'Advanced tools for business management'}</p>
+                  <h3>Business</h3>
+                  <p>Advanced tools for business management</p>
                   <ul>
-                    <li>{t('unlimitedUsers') || 'Unlimited users'}</li>
-                    <li>{t('businessAnalytics') || 'Business analytics'}</li>
-                    <li>{t('invoiceManagement') || 'Invoice management'}</li>
-                    <li>{t('advancedReporting') || 'Advanced reporting'}</li>
+                    <li>Unlimited users</li>
+                    <li>Business analytics</li>
+                    <li>Invoice management</li>
+                    <li>Advanced reporting</li>
                   </ul>
                 </div>
               </div>
               
-              <button className="btn-save" onClick={() => handleSave('account')} disabled={saving}>
-                {saving ? (t('saving') || 'Saving...') : '💾 ' + (t('saveAccountType') || 'Save Account Type')}
+              <button 
+                className="btn-save" 
+                onClick={() => handleSave('account')} 
+                disabled={saving || !isAuthenticated}
+                title={!isAuthenticated ? "Please log in to save to database" : ""}
+              >
+                {saving ? '💾 Saving to MongoDB...' : '💾 Save Account Type to MongoDB Database'}
               </button>
+              {!isAuthenticated && <small className="auth-warning">⚠️ Please log in to save to database</small>}
             </div>
           )}
 
           {/* Theme Tab */}
           {activeTab === 'theme' && (
             <div className="settings-section">
-              <h2>🎨 {t('themeSettings') || 'Theme Settings'}</h2>
-              <p className="section-description">{t('customizeAppearance') || 'Customize your app appearance'}</p>
+              <h2>🎨 Theme Settings</h2>
+              <p className="section-description">Customize your app appearance (Saved to MongoDB)</p>
               
               <div className="setting-group">
-                <label>{t('themeMode') || 'Theme Mode'}</label>
+                <label>Theme Mode</label>
                 <select
                   value={localSettings.theme?.mode || 'light'}
                   onChange={(e) => handleThemeChange(e.target.value)}
                   disabled={saving}
                 >
-                  <option value="light">☀️ {t('lightMode') || 'Light Mode'}</option>
-                  <option value="dark">🌙 {t('darkMode') || 'Dark Mode'}</option>
-                  <option value="auto">🔄 {t('autoSystem') || 'Auto (System)'}</option>
+                  <option value="light">☀️ Light Mode</option>
+                  <option value="dark">🌙 Dark Mode</option>
+                  <option value="auto">🔄 Auto (System)</option>
                 </select>
-                <small>{t('themeChangesImmediate') || 'Theme changes will be applied immediately across the entire app'}</small>
+                <small>Theme changes will be applied immediately across the entire app</small>
               </div>
               
               <div className="setting-group">
-                <label>{t('primaryColor') || 'Primary Color'}</label>
+                <label>Primary Color</label>
                 <div className="color-picker-group">
                   <input
                     type="color"
@@ -1442,20 +1457,20 @@ const Settings = () => {
               </div>
               
               <div className="setting-group">
-                <label>{t('fontSize') || 'Font Size'}</label>
+                <label>Font Size</label>
                 <select
                   value={localSettings.theme?.fontSize || 'medium'}
                   onChange={(e) => handleFontSizeChange(e.target.value)}
                   disabled={saving}
                 >
-                  <option value="small">{t('small') || 'Small'} (14px)</option>
-                  <option value="medium">{t('medium') || 'Medium'} (16px)</option>
-                  <option value="large">{t('large') || 'Large'} (18px)</option>
+                  <option value="small">Small (14px)</option>
+                  <option value="medium">Medium (16px)</option>
+                  <option value="large">Large (18px)</option>
                 </select>
               </div>
               
               <div className="setting-group">
-                <label>{t('fontFamily') || 'Font Family'}</label>
+                <label>Font Family</label>
                 <select
                   value={localSettings.theme?.fontFamily || 'Inter'}
                   onChange={(e) => handleFontFamilyChange(e.target.value)}
@@ -1469,23 +1484,29 @@ const Settings = () => {
                 </select>
               </div>
               
-              <button className="btn-save" onClick={() => handleSave('theme')} disabled={saving}>
-                {saving ? (t('applying') || 'Applying...') : '💾 ' + (t('saveTheme') || 'Save Theme')}
+              <button 
+                className="btn-save" 
+                onClick={() => handleSave('theme')} 
+                disabled={saving || !isAuthenticated}
+                title={!isAuthenticated ? "Please log in to save to database" : ""}
+              >
+                {saving ? '💾 Saving to MongoDB...' : '💾 Save Theme to MongoDB Database'}
               </button>
+              {!isAuthenticated && <small className="auth-warning">⚠️ Please log in to save to database</small>}
             </div>
           )}
 
           {/* Notifications Tab */}
           {activeTab === 'notifications' && (
             <div className="settings-section">
-              <h2>🔔 {t('notificationSettings') || 'Notification Settings'}</h2>
-              <p className="section-description">{t('controlNotifications') || 'Control how you receive notifications'}</p>
+              <h2>🔔 Notification Settings</h2>
+              <p className="section-description">Control how you receive notifications (Saved to MongoDB)</p>
               
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">📧 {t('emailNotifications') || 'Email Notifications'}</span>
-                    <small>{t('receiveEmailUpdates') || 'Receive updates via email'}</small>
+                    <span className="toggle-label">📧 Email Notifications</span>
+                    <small>Receive updates via email</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1499,8 +1520,8 @@ const Settings = () => {
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">🔔 {t('pushNotifications') || 'Push Notifications'}</span>
-                    <small>{t('realtimeAlerts') || 'Get real-time alerts'}</small>
+                    <span className="toggle-label">🔔 Push Notifications</span>
+                    <small>Get real-time alerts</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1514,8 +1535,8 @@ const Settings = () => {
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">💰 {t('transactionAlerts') || 'Transaction Alerts'}</span>
-                    <small>{t('notifyNewTransactions') || 'Notify on new transactions'}</small>
+                    <span className="toggle-label">💰 Transaction Alerts</span>
+                    <small>Notify on new transactions</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1529,8 +1550,8 @@ const Settings = () => {
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">📊 {t('weeklyReports') || 'Weekly Reports'}</span>
-                    <small>{t('receiveWeeklySummaries') || 'Receive weekly financial summaries'}</small>
+                    <span className="toggle-label">📊 Weekly Reports</span>
+                    <small>Receive weekly financial summaries</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1544,8 +1565,8 @@ const Settings = () => {
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">💵 {t('budgetAlerts') || 'Budget Alerts'}</span>
-                    <small>{t('warnBudgetLimits') || 'Warn when nearing budget limits'}</small>
+                    <span className="toggle-label">💵 Budget Alerts</span>
+                    <small>Warn when nearing budget limits</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1559,8 +1580,8 @@ const Settings = () => {
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">🔐 {t('securityAlerts') || 'Security Alerts'}</span>
-                    <small>{t('importantSecurityNotifications') || 'Important security notifications'}</small>
+                    <span className="toggle-label">🔐 Security Alerts</span>
+                    <small>Important security notifications</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1571,36 +1592,42 @@ const Settings = () => {
                 </label>
               </div>
               
-              <button className="btn-save" onClick={() => handleSave('notifications')} disabled={saving}>
-                {saving ? (t('saving') || 'Saving...') : '💾 ' + (t('saveNotifications') || 'Save Notifications')}
+              <button 
+                className="btn-save" 
+                onClick={() => handleSave('notifications')} 
+                disabled={saving || !isAuthenticated}
+                title={!isAuthenticated ? "Please log in to save to database" : ""}
+              >
+                {saving ? '💾 Saving to MongoDB...' : '💾 Save Notifications to MongoDB Database'}
               </button>
+              {!isAuthenticated && <small className="auth-warning">⚠️ Please log in to save to database</small>}
             </div>
           )}
 
-          {/* Privacy Tab - FIXED */}
+          {/* Privacy Tab */}
           {activeTab === 'privacy' && (
             <div className="settings-section">
-              <h2>🔒 {t('privacySecurity') || 'Privacy & Security'}</h2>
-              <p className="section-description">{t('managePrivacySecurity') || 'Manage your privacy and security preferences'}</p>
+              <h2>🔒 Privacy & Security</h2>
+              <p className="section-description">Manage your privacy and security preferences (Saved to MongoDB)</p>
               
               <div className="setting-group">
-                <label>{t('profileVisibility') || 'Profile Visibility'}</label>
+                <label>Profile Visibility</label>
                 <select
                   value={localSettings.privacy?.profileVisibility || 'private'}
                   onChange={(e) => updateLocalSetting('privacy', 'profileVisibility', e.target.value)}
                   disabled={saving}
                 >
-                  <option value="public">🌐 {t('public') || 'Public'}</option>
-                  <option value="private">🔒 {t('private') || 'Private'}</option>
-                  <option value="friends">👥 {t('friendsOnly') || 'Friends Only'}</option>
+                  <option value="public">🌐 Public</option>
+                  <option value="private">🔒 Private</option>
+                  <option value="friends">👥 Friends Only</option>
                 </select>
               </div>
               
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">{t('showEmail') || 'Show Email'}</span>
-                    <small>{t('displayEmailOnProfile') || 'Display email on profile'}</small>
+                    <span className="toggle-label">Show Email</span>
+                    <small>Display email on profile</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1611,16 +1638,16 @@ const Settings = () => {
                 </label>
               </div>
               
-              {/* Two-Factor Authentication Section - FIXED */}
+              {/* Two-Factor Authentication Section */}
               <div className="two-factor-section">
                 <div className="setting-group toggle-group">
                   <label>
                     <div>
-                      <span className="toggle-label">{t('twoFactorAuth') || 'Two-Factor Authentication'}</span>
+                      <span className="toggle-label">Two-Factor Authentication</span>
                       <small>
                         {twoFactorStatus.isEnabled 
-                          ? (t('twoFactorEnabledDescription') || 'Extra security enabled with 6-digit PIN. Verification required every 15 days.')
-                          : (t('twoFactorDisabledDescription') || 'Add extra security to your account with a 6-digit PIN. When enabled, you\'ll need to enter your PIN periodically.')
+                          ? 'Extra security enabled with 6-digit PIN. Verification required every 15 days.'
+                          : 'Add extra security to your account with a 6-digit PIN. When enabled, you\'ll need to enter your PIN periodically.'
                         }
                         {twoFactorStatus.isEnabled && twoFactorStatus.nextVerificationDate && (
                           <div className="verification-info">
@@ -1633,7 +1660,7 @@ const Settings = () => {
                       type="checkbox"
                       checked={twoFactorStatus.isEnabled}
                       onChange={(e) => handleTwoFactorAuth(e.target.checked)}
-                      disabled={saving || twoFactorLoading}
+                      disabled={saving || twoFactorLoading || !isAuthenticated}
                     />
                   </label>
                 </div>
@@ -1644,8 +1671,8 @@ const Settings = () => {
                       <span className="status-icon">🛡️</span>
                       <span className="status-text">
                         {requires2FAVerification 
-                          ? (t('twoFactorVerificationNeeded') || 'Two-factor authentication verification needed')
-                          : (t('twoFactorActive') || 'Two-factor authentication is active with 6-digit PIN')
+                          ? 'Two-factor authentication verification needed'
+                          : 'Two-factor authentication is active with 6-digit PIN'
                         }
                         {twoFactorStatus.nextVerificationDate && !requires2FAVerification && (
                           <span className="next-verification">
@@ -1658,17 +1685,17 @@ const Settings = () => {
                       <button 
                         className="btn-secondary btn-sm"
                         onClick={() => handleTwoFactorAuth(false)}
-                        disabled={saving || twoFactorLoading}
+                        disabled={saving || twoFactorLoading || !isAuthenticated}
                       >
-                        {twoFactorLoading ? (t('disabling') || 'Disabling...') : (t('disable2FA') || 'Disable 2FA')}
+                        {twoFactorLoading ? 'Disabling...' : 'Disable 2FA'}
                       </button>
                       {requires2FAVerification && (
                         <button 
                           className="btn-verify btn-sm"
                           onClick={handleVerification}
-                          disabled={saving || twoFactorLoading}
+                          disabled={saving || twoFactorLoading || !isAuthenticated}
                         >
-                          {twoFactorLoading ? (t('verifying') || 'Verifying...') : (t('verifyNow') || 'Verify Now')}
+                          {twoFactorLoading ? 'Verifying...' : 'Verify Now'}
                         </button>
                       )}
                     </div>
@@ -1679,8 +1706,8 @@ const Settings = () => {
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">{t('loginAlerts') || 'Login Alerts'}</span>
-                    <small>{t('notifyLoginAttempts') || 'Notify on new login attempts'}</small>
+                    <span className="toggle-label">Login Alerts</span>
+                    <small>Notify on new login attempts</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1695,29 +1722,35 @@ const Settings = () => {
                 <button 
                   className="btn-secondary" 
                   onClick={() => setShowPasswordModal(true)}
-                  disabled={saving}
+                  disabled={saving || !isAuthenticated}
                 >
-                  🔑 {t('changePassword') || 'Change Password'}
+                  🔑 Change Password
                 </button>
               </div>
               
-              <button className="btn-save" onClick={() => handleSave('privacy')} disabled={saving}>
-                {saving ? (t('saving') || 'Saving...') : '💾 ' + (t('savePrivacy') || 'Save Privacy')}
+              <button 
+                className="btn-save" 
+                onClick={() => handleSave('privacy')} 
+                disabled={saving || !isAuthenticated}
+                title={!isAuthenticated ? "Please log in to save to database" : ""}
+              >
+                {saving ? '💾 Saving to MongoDB...' : '💾 Save Privacy to MongoDB Database'}
               </button>
+              {!isAuthenticated && <small className="auth-warning">⚠️ Please log in to save to database</small>}
             </div>
           )}
 
           {/* Appearance Tab */}
           {activeTab === 'appearance' && (
             <div className="settings-section">
-              <h2>✨ {t('appearanceSettings') || 'Appearance Settings'}</h2>
-              <p className="section-description">{t('customizeAppLook') || 'Customize how the app looks'}</p>
+              <h2>✨ Appearance Settings</h2>
+              <p className="section-description">Customize how the app looks (Saved to MongoDB)</p>
               
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">{t('compactMode') || 'Compact Mode'}</span>
-                    <small>{t('reduceSpacing') || 'Reduce spacing for more content'}</small>
+                    <span className="toggle-label">Compact Mode</span>
+                    <small>Reduce spacing for more content</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1731,8 +1764,8 @@ const Settings = () => {
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">{t('showAnimations') || 'Show Animations'}</span>
-                    <small>{t('enableSmoothTransitions') || 'Enable smooth transitions'}</small>
+                    <span className="toggle-label">Show Animations</span>
+                    <small>Enable smooth transitions</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1744,7 +1777,7 @@ const Settings = () => {
               </div>
               
               <div className="setting-group">
-                <label>{t('currencySymbol') || 'Currency Symbol'}</label>
+                <label>Currency Symbol</label>
                 <select
                   value={localSettings.appearance?.currencySymbol || '$'}
                   onChange={(e) => updateLocalSetting('appearance', 'currencySymbol', e.target.value)}
@@ -1759,7 +1792,7 @@ const Settings = () => {
               </div>
               
               <div className="setting-group">
-                <label>{t('dateFormat') || 'Date Format'}</label>
+                <label>Date Format</label>
                 <select
                   value={localSettings.appearance?.dateFormat || 'MM/DD/YYYY'}
                   onChange={(e) => updateLocalSetting('appearance', 'dateFormat', e.target.value)}
@@ -1771,20 +1804,26 @@ const Settings = () => {
                 </select>
               </div>
               
-              <button className="btn-save" onClick={() => handleSave('appearance')} disabled={saving}>
-                {saving ? (t('applying') || 'Applying...') : '💾 ' + (t('saveAppearance') || 'Save Appearance')}
+              <button 
+                className="btn-save" 
+                onClick={() => handleSave('appearance')} 
+                disabled={saving || !isAuthenticated}
+                title={!isAuthenticated ? "Please log in to save to database" : ""}
+              >
+                {saving ? '💾 Saving to MongoDB...' : '💾 Save Appearance to MongoDB Database'}
               </button>
+              {!isAuthenticated && <small className="auth-warning">⚠️ Please log in to save to database</small>}
             </div>
           )}
 
           {/* Language Tab */}
           {activeTab === 'language' && (
             <div className="settings-section">
-              <h2>🌍 {t('languageRegion') || 'Language & Region'}</h2>
-              <p className="section-description">{t('setLanguagePreferences') || 'Set your language and regional preferences'}</p>
+              <h2>🌍 Language & Region</h2>
+              <p className="section-description">Set your language and regional preferences (Saved to MongoDB)</p>
               
               <div className="setting-group">
-                <label>{t('language') || 'Language'}</label>
+                <label>Language</label>
                 <select
                   value={localSettings.language?.appLanguage || localSettings.language?.locale || language || 'en'}
                   onChange={(e) => handleLanguageChange(e.target.value)}
@@ -1803,11 +1842,11 @@ const Settings = () => {
                   <option value="ar">🇸🇦 العربية (Arabic)</option>
                   <option value="hi">🇮🇳 हिन्दी (Hindi)</option>
                 </select>
-                <small>{t('languageChangesImmediate') || 'Language changes will be applied immediately across the entire app'}</small>
+                <small>Language changes will be applied immediately across the entire app</small>
               </div>
 
               <div className="setting-group">
-                <label>{t('currency') || 'Currency'}</label>
+                <label>Currency</label>
                 <select
                   value={localSettings.language?.currency || 'USD'}
                   onChange={(e) => handleCurrencyChange(e.target.value)}
@@ -1822,11 +1861,11 @@ const Settings = () => {
                   <option value="CAD">🇨🇦 Canadian Dollar (CAD)</option>
                   <option value="CNY">🇨🇳 Chinese Yuan (CNY)</option>
                 </select>
-                <small>{t('currencyChangesImmediate') || 'Currency changes will be applied immediately across the entire app'}</small>
+                <small>Currency changes will be applied immediately across the entire app</small>
               </div>
               
               <div className="setting-group">
-                <label>{t('timezone') || 'Timezone'}</label>
+                <label>Timezone</label>
                 <select
                   value={localSettings.language?.timezone || 'UTC'}
                   onChange={(e) => handleTimezoneChange(e.target.value)}
@@ -1841,26 +1880,32 @@ const Settings = () => {
                   <option value="Asia/Kolkata">India (IST)</option>
                   <option value="Asia/Tokyo">Tokyo (JST)</option>
                 </select>
-                <small>{t('timezoneChangesImmediate') || 'Timezone changes will be applied immediately across the entire app'}</small>
+                <small>Timezone changes will be applied immediately across the entire app</small>
               </div>
               
-              <button className="btn-save" onClick={() => handleSave('language')} disabled={saving}>
-                {saving ? (t('saving') || 'Saving...') : '💾 ' + (t('saveLanguage') || 'Save Language')}
+              <button 
+                className="btn-save" 
+                onClick={() => handleSave('language')} 
+                disabled={saving || !isAuthenticated}
+                title={!isAuthenticated ? "Please log in to save to database" : ""}
+              >
+                {saving ? '💾 Saving to MongoDB...' : '💾 Save Language to MongoDB Database'}
               </button>
+              {!isAuthenticated && <small className="auth-warning">⚠️ Please log in to save to database</small>}
             </div>
           )}
 
           {/* Performance Tab */}
           {activeTab === 'performance' && (
             <div className="settings-section">
-              <h2>⚡ {t('performanceSettings') || 'Performance Settings'}</h2>
-              <p className="section-description">{t('optimizeAppPerformance') || 'Optimize app performance'}</p>
+              <h2>⚡ Performance Settings</h2>
+              <p className="section-description">Optimize app performance (Saved to MongoDB)</p>
               
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">{t('enableCache') || 'Enable Cache'}</span>
-                    <small>{t('fasterLoadTimes') || 'Faster load times'}</small>
+                    <span className="toggle-label">Enable Cache</span>
+                    <small>Faster load times</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1874,8 +1919,8 @@ const Settings = () => {
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">{t('autoSave') || 'Auto Save'}</span>
-                    <small>{t('automaticallySaveChanges') || 'Automatically save changes'}</small>
+                    <span className="toggle-label">Auto Save</span>
+                    <small>Automatically save changes</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1889,8 +1934,8 @@ const Settings = () => {
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">{t('lowDataMode') || 'Low Data Mode'}</span>
-                    <small>{t('reduceDataUsage') || 'Reduce data usage'}</small>
+                    <span className="toggle-label">Low Data Mode</span>
+                    <small>Reduce data usage</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1901,23 +1946,29 @@ const Settings = () => {
                 </label>
               </div>
               
-              <button className="btn-save" onClick={() => handleSave('performance')} disabled={saving}>
-                {saving ? (t('saving') || 'Saving...') : '💾 ' + (t('savePerformance') || 'Save Performance')}
+              <button 
+                className="btn-save" 
+                onClick={() => handleSave('performance')} 
+                disabled={saving || !isAuthenticated}
+                title={!isAuthenticated ? "Please log in to save to database" : ""}
+              >
+                {saving ? '💾 Saving to MongoDB...' : '💾 Save Performance to MongoDB Database'}
               </button>
+              {!isAuthenticated && <small className="auth-warning">⚠️ Please log in to save to database</small>}
             </div>
           )}
 
           {/* Accessibility Tab */}
           {activeTab === 'accessibility' && (
             <div className="settings-section">
-              <h2>♿ {t('accessibilitySettings') || 'Accessibility Settings'}</h2>
-              <p className="section-description">{t('makeAppEasierToUse') || 'Make the app easier to use'}</p>
+              <h2>♿ Accessibility Settings</h2>
+              <p className="section-description">Make the app easier to use (Saved to MongoDB)</p>
               
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">{t('highContrast') || 'High Contrast'}</span>
-                    <small>{t('betterVisibility') || 'Better visibility'}</small>
+                    <span className="toggle-label">High Contrast</span>
+                    <small>Better visibility</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1931,8 +1982,8 @@ const Settings = () => {
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">{t('reduceMotion') || 'Reduce Motion'}</span>
-                    <small>{t('minimizeAnimations') || 'Minimize animations'}</small>
+                    <span className="toggle-label">Reduce Motion</span>
+                    <small>Minimize animations</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1946,8 +1997,8 @@ const Settings = () => {
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">{t('screenReaderSupport') || 'Screen Reader Support'}</span>
-                    <small>{t('optimizeScreenReaders') || 'Optimize for screen readers'}</small>
+                    <span className="toggle-label">Screen Reader Support</span>
+                    <small>Optimize for screen readers</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1961,8 +2012,8 @@ const Settings = () => {
               <div className="setting-group toggle-group">
                 <label>
                   <div>
-                    <span className="toggle-label">{t('keyboardNavigation') || 'Keyboard Navigation'}</span>
-                    <small>{t('enhancedKeyboardSupport') || 'Enhanced keyboard support'}</small>
+                    <span className="toggle-label">Keyboard Navigation</span>
+                    <small>Enhanced keyboard support</small>
                   </div>
                   <input
                     type="checkbox"
@@ -1973,56 +2024,83 @@ const Settings = () => {
                 </label>
               </div>
               
-              <button className="btn-save" onClick={() => handleSave('accessibility')} disabled={saving}>
-                {saving ? (t('saving') || 'Saving...') : '💾 ' + (t('saveAccessibility') || 'Save Accessibility')}
+              <button 
+                className="btn-save" 
+                onClick={() => handleSave('accessibility')} 
+                disabled={saving || !isAuthenticated}
+                title={!isAuthenticated ? "Please log in to save to database" : ""}
+              >
+                {saving ? '💾 Saving to MongoDB...' : '💾 Save Accessibility to MongoDB Database'}
               </button>
+              {!isAuthenticated && <small className="auth-warning">⚠️ Please log in to save to database</small>}
             </div>
           )}
 
           {/* About Tab */}
           {activeTab === 'about' && (
             <div className="settings-section">
-              <h2>ℹ️ {t('aboutFinovo') || 'About Finovo'}</h2>
-              <p className="section-description">{t('appInformation') || 'App information and data management'}</p>
+              <h2>ℹ️ About Finovo</h2>
+              <p className="section-description">App information and data management (All data in MongoDB)</p>
               
               <div className="about-content">
-                {/* Tenant ID from original image */}
                 <div className="about-item">
-                  <strong>{t('tenantId') || 'Tenant ID'}:</strong>
-                  <span className="tenant-id-value" title="788412...">788412...</span>
+                  <strong>Tenant ID:</strong>
+                  <span className="tenant-id-value" title={getTenantId()}>{getTenantId().substring(0, 10)}...</span>
                 </div>
                 
-                {/* Version from original image */}
                 <div className="about-item">
-                  <strong>{t('version') || 'Version'}:</strong>
+                  <strong>Version:</strong>
                   <span>3.2.0</span>
                 </div>
                 
-                {/* Last Updated from original image */}
                 <div className="about-item">
-                  <strong>{t('lastUpdated') || 'Last Updated'}:</strong>
+                  <strong>Last Updated:</strong>
                   <span>November 2024</span>
                 </div>
                 
-                {/* License from original image */}
                 <div className="about-item">
-                  <strong>{t('license') || 'License'}:</strong>
+                  <strong>License:</strong>
                   <span>MIT License</span>
                 </div>
                 
-                {/* Support email from original image */}
                 <div className="about-item">
-                  <strong>{t('support') || 'Support'}:</strong>
+                  <strong>Support:</strong>
                   <span>support@finovo.app</span>
                 </div>
                 
-                {/* Action buttons */}
+                <div className="about-item">
+                  <strong>Current User:</strong>
+                  <span className="user-email-info">{userEmail}</span>
+                </div>
+                
+                <div className="about-item">
+                  <strong>Storage:</strong>
+                  <span className="storage-info">💾 MongoDB Database</span>
+                </div>
+                
+                <div className="about-item">
+                  <strong>Database Status:</strong>
+                  <span className={`db-status ${isAuthenticated ? 'connected' : 'disconnected'}`}>
+                    {isAuthenticated ? '✅ Connected' : '❌ Not Connected'}
+                  </span>
+                </div>
+                
                 <div className="about-actions">
-                  <button className="btn-secondary" onClick={handleExport} disabled={saving}>
-                    📥 {t('exportData') || 'Export Data'}
+                  <button 
+                    className="btn-secondary" 
+                    onClick={handleExport} 
+                    disabled={saving || !isAuthenticated}
+                    title={!isAuthenticated ? "Please log in to export data" : ""}
+                  >
+                    📥 Export Data from MongoDB
                   </button>
-                  <button className="btn-danger" onClick={handleReset} disabled={saving}>
-                    🔄 {t('resetSettings') || 'Reset All Settings'}
+                  <button 
+                    className="btn-danger" 
+                    onClick={handleReset} 
+                    disabled={saving || !isAuthenticated}
+                    title={!isAuthenticated ? "Please log in to reset settings" : ""}
+                  >
+                    🔄 Reset All Settings in MongoDB
                   </button>
                 </div>
               </div>
@@ -2036,7 +2114,7 @@ const Settings = () => {
         <div className="modal-overlay" onClick={() => !saving && setShowPasswordModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>🔑 {t('changePassword') || 'Change Password'}</h3>
+              <h3>🔑 Change Password</h3>
               <button 
                 className="modal-close"
                 onClick={() => !saving && setShowPasswordModal(false)}
@@ -2047,32 +2125,32 @@ const Settings = () => {
             </div>
             <div className="modal-body">
               <div className="setting-group">
-                <label>{t('currentPassword') || 'Current Password'}</label>
+                <label>Current Password</label>
                 <input
                   type="password"
                   value={passwordData.currentPassword}
                   onChange={(e) => setPasswordData({...passwordData, currentPassword: e.target.value})}
-                  placeholder={t('enterCurrentPassword') || "Enter current password"}
+                  placeholder="Enter current password"
                   disabled={saving}
                 />
               </div>
               <div className="setting-group">
-                <label>{t('newPassword') || 'New Password'}</label>
+                <label>New Password</label>
                 <input
                   type="password"
                   value={passwordData.newPassword}
                   onChange={(e) => setPasswordData({...passwordData, newPassword: e.target.value})}
-                  placeholder={t('enterNewPassword') || "Enter new password (min 6 characters)"}
+                  placeholder="Enter new password (min 6 characters)"
                   disabled={saving}
                 />
               </div>
               <div className="setting-group">
-                <label>{t('confirmPassword') || 'Confirm New Password'}</label>
+                <label>Confirm New Password</label>
                 <input
                   type="password"
                   value={passwordData.confirmPassword}
                   onChange={(e) => setPasswordData({...passwordData, confirmPassword: e.target.value})}
-                  placeholder={t('confirmNewPassword') || "Confirm new password"}
+                  placeholder="Confirm new password"
                   disabled={saving}
                 />
               </div>
@@ -2083,14 +2161,14 @@ const Settings = () => {
                 onClick={() => !saving && setShowPasswordModal(false)}
                 disabled={saving}
               >
-                {t('cancel') || 'Cancel'}
+                Cancel
               </button>
               <button 
                 className="btn-save" 
                 onClick={handlePasswordChange}
                 disabled={saving}
               >
-                {saving ? (t('changing') || 'Changing...') : t('changePassword') || 'Change Password'}
+                {saving ? 'Changing...' : 'Change Password in Database'}
               </button>
             </div>
           </div>
@@ -2102,7 +2180,7 @@ const Settings = () => {
         <div className="modal-overlay auto-2fa-modal">
           <div className="modal-content two-factor-modal important-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>🛡️ {t('securityVerificationRequired') || 'Security Verification Required'}</h3>
+              <h3>🛡️ Security Verification Required</h3>
               <div className="modal-subtitle">
                 <span className="priority-badge">⚠️ HIGH PRIORITY</span>
               </div>
@@ -2112,8 +2190,8 @@ const Settings = () => {
               <div className="verification-required-message">
                 <div className="security-icon">🔐</div>
                 <div className="message-content">
-                  <h4>{t('twoFactorVerificationNeeded') || 'Two-Factor Authentication Verification Needed'}</h4>
-                  <p>{t('periodicVerificationDescription') || 'For your security, we require periodic verification of your 6-digit PIN. This helps protect your account from unauthorized access.'}</p>
+                  <h4>Two-Factor Authentication Verification Needed</h4>
+                  <p>For your security, we require periodic verification of your 6-digit PIN. This helps protect your account from unauthorized access.</p>
                   
                   {twoFactorStatus.nextVerificationDate && (
                     <div className="verification-details">
@@ -2129,7 +2207,7 @@ const Settings = () => {
               </div>
               
               <div className="setting-group">
-                <label>{t('enter6DigitPin') || 'Enter 6-digit PIN'}:</label>
+                <label>Enter 6-digit PIN:</label>
                 <input
                   type="password"
                   inputMode="numeric"
@@ -2145,7 +2223,7 @@ const Settings = () => {
                   disabled={twoFactorLoading}
                   autoFocus
                 />
-                <small>{t('enterYourPinToVerify') || 'Enter your PIN to complete verification'}</small>
+                <small>Enter your PIN to complete verification</small>
               </div>
               
               <div className="modal-footer">
@@ -2154,7 +2232,7 @@ const Settings = () => {
                   onClick={verifyPinForVerification}
                   disabled={twoFactorLoading || twoFactorData.pin.length !== 6}
                 >
-                  {twoFactorLoading ? (t('verifying') || 'Verifying...') : t('verifyAndContinue') || 'Verify & Continue'}
+                  {twoFactorLoading ? 'Verifying...' : 'Verify & Continue'}
                 </button>
                 <small className="cannot-skip-note">This verification cannot be skipped for security reasons.</small>
               </div>
@@ -2169,8 +2247,8 @@ const Settings = () => {
           <div className="modal-content two-factor-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>
-                {twoFactorData.step === 'pin-setup' && '🔐 ' + (t('setupPin2FA') || 'Setup 6-Digit PIN')}
-                {twoFactorData.step === 'verify-pin' && '🔐 ' + (t('verifyPin2FA') || 'Verify 6-Digit PIN')}
+                {twoFactorData.step === 'pin-setup' && '🔐 Setup 6-Digit PIN'}
+                {twoFactorData.step === 'verify-pin' && '🔐 Verify 6-Digit PIN'}
               </h3>
               <button 
                 className="modal-close"
@@ -2186,12 +2264,12 @@ const Settings = () => {
               {twoFactorData.step === 'pin-setup' && (
                 <div className="two-factor-step">
                   <div className="step-description">
-                    <p>{t('pinSetupDescription') || 'Create a 6-digit PIN for two-factor authentication. You\'ll need to enter this PIN periodically for security verification.'}</p>
+                    <p>Create a 6-digit PIN for two-factor authentication. You'll need to enter this PIN periodically for security verification.</p>
                     <p className="whatsapp-style-note">🛡️ <strong>Security Note:</strong> Like WhatsApp, you'll need to verify your PIN every 15 days for added security.</p>
                   </div>
                   
                   <div className="setting-group">
-                    <label>{t('enter6DigitPin') || 'Enter 6-digit PIN'}:</label>
+                    <label>Enter 6-digit PIN:</label>
                     <input
                       type="password"
                       inputMode="numeric"
@@ -2207,11 +2285,11 @@ const Settings = () => {
                       disabled={twoFactorLoading}
                       autoFocus
                     />
-                    <small>{t('pinMustBe6Digits') || 'Must be exactly 6 digits'}</small>
+                    <small>Must be exactly 6 digits</small>
                   </div>
 
                   <div className="setting-group">
-                    <label>{t('confirm6DigitPin') || 'Confirm 6-digit PIN'}:</label>
+                    <label>Confirm 6-digit PIN:</label>
                     <input
                       type="password"
                       inputMode="numeric"
@@ -2234,14 +2312,14 @@ const Settings = () => {
                       onClick={() => !twoFactorLoading && setShowTwoFactorModal(false)}
                       disabled={twoFactorLoading}
                     >
-                      {t('cancel') || 'Cancel'}
+                      Cancel
                     </button>
                     <button 
                       className="btn-save" 
                       onClick={setupPin}
                       disabled={twoFactorLoading || twoFactorData.pin.length !== 6 || twoFactorData.confirmPin.length !== 6}
                     >
-                      {twoFactorLoading ? (t('settingUp') || 'Setting Up...') : t('setupPin') || 'Setup PIN'}
+                      {twoFactorLoading ? 'Setting Up...' : 'Setup PIN'}
                     </button>
                   </div>
                 </div>
@@ -2251,7 +2329,7 @@ const Settings = () => {
               {twoFactorData.step === 'verify-pin' && (
                 <div className="two-factor-step">
                   <div className="step-description">
-                    <p>{t('periodicVerificationDescription') || 'For security, please verify your 6-digit PIN. This is required every 15 days.'}</p>
+                    <p>For security, please verify your 6-digit PIN. This is required every 15 days.</p>
                     {twoFactorStatus.nextVerificationDate && (
                       <p className="verification-due">
                         Verification due since {new Date(twoFactorStatus.nextVerificationDate).toLocaleDateString()}
@@ -2260,7 +2338,7 @@ const Settings = () => {
                   </div>
                   
                   <div className="setting-group">
-                    <label>{t('enter6DigitPin') || 'Enter 6-digit PIN'}:</label>
+                    <label>Enter 6-digit PIN:</label>
                     <input
                       type="password"
                       inputMode="numeric"
@@ -2276,7 +2354,7 @@ const Settings = () => {
                       disabled={twoFactorLoading}
                       autoFocus
                     />
-                    <small>{t('enterYourPinToVerify') || 'Enter your PIN to complete verification'}</small>
+                    <small>Enter your PIN to complete verification</small>
                   </div>
                   
                   <div className="modal-footer">
@@ -2285,14 +2363,14 @@ const Settings = () => {
                       onClick={() => !twoFactorLoading && setShowTwoFactorModal(false)}
                       disabled={twoFactorLoading}
                     >
-                      {t('cancel') || 'Cancel'}
+                      Cancel
                     </button>
                     <button 
                       className="btn-save" 
                       onClick={verifyPinForVerification}
                       disabled={twoFactorLoading || twoFactorData.pin.length !== 6}
                     >
-                      {twoFactorLoading ? (t('verifying') || 'Verifying...') : t('verifyPin') || 'Verify PIN'}
+                      {twoFactorLoading ? 'Verifying...' : 'Verify PIN'}
                     </button>
                   </div>
                 </div>
@@ -2307,7 +2385,7 @@ const Settings = () => {
         <div className="modal-overlay" onClick={() => !saving && setShowSignoutModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>🚪 {t('signOut') || 'Sign Out'}</h3>
+              <h3>🚪 Sign Out</h3>
               <button 
                 className="modal-close"
                 onClick={() => !saving && setShowSignoutModal(false)}
@@ -2320,15 +2398,16 @@ const Settings = () => {
               <div className="signout-warning">
                 <div className="warning-icon">⚠️</div>
                 <div className="warning-content">
-                  <h4>{t('confirmSignOut') || 'Are you sure you want to sign out?'}</h4>
-                  <p>{t('signOutWarning') || 'You will need to sign in again to access your account.'}</p>
+                  <h4>Are you sure you want to sign out?</h4>
+                  <p>You will need to sign in again to access your account.</p>
                   <ul>
-                    <li>{t('unsavedChangesLost') || 'All unsaved changes will be lost'}</li>
-                    <li>{t('redirectToLogin') || 'You\'ll be redirected to the login page'}</li>
-                    <li>{t('sessionDataCleared') || 'Your session data will be cleared'}</li>
+                    <li>All unsaved changes will be lost</li>
+                    <li>You'll be redirected to the login page</li>
+                    <li>Your session data will be cleared</li>
                     {twoFactorStatus.isEnabled && (
-                      <li>🛡️ {t('twoFactorWillRemain') || 'Two-factor authentication will remain enabled'}</li>
+                      <li>🛡️ Two-factor authentication will remain enabled in database</li>
                     )}
+                    <li>💾 Your settings are safely stored in MongoDB database</li>
                   </ul>
                 </div>
               </div>
@@ -2339,14 +2418,14 @@ const Settings = () => {
                 onClick={() => !saving && setShowSignoutModal(false)}
                 disabled={saving}
               >
-                {t('cancel') || 'Cancel'}
+                Cancel
               </button>
               <button 
                 className="btn-danger" 
                 onClick={handleSignout}
                 disabled={saving}
               >
-                {saving ? (t('signingOut') || 'Signing Out...') : t('yesSignOut') || 'Yes, Sign Out'}
+                {saving ? 'Signing Out...' : 'Yes, Sign Out'}
               </button>
             </div>
           </div>

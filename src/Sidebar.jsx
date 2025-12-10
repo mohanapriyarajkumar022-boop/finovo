@@ -17,10 +17,12 @@ import {
   ChevronLeft,
   Package,
 } from "lucide-react";
+import { useLanguage } from "./context/LanguageContext.js";
 
 const Sidebar = ({ userSession, setUserSession }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -48,18 +50,19 @@ const Sidebar = ({ userSession, setUserSession }) => {
     };
   }, [isExpanded]);
 
+  // Build nav items with translated labels that update when language changes
   const navItems = [
-    { name: "Dashboard", icon: LayoutDashboard, page: "/dashboard" },
-    { name: "Income", icon: TrendingUp, page: "/income" },
-    { name: "Expenditure", icon: TrendingDown, page: "/expenditure" },
-    { name: "Profit & Loss", icon: BarChart3, page: "/profitloss" },
-    { name: "Projects", icon: Briefcase, page: "/projects" },
-    { name: "Smart Borrow", icon: Wallet, page: "/smart-borrow" },
-    { name: "Monthly Bills", icon: Calendar, page: "/monthly-bills" },
-    { name: "Investment", icon: TrendingUp, page: "/investment" },
-    { name: "Asset", icon: Package, page: "/asset" }, // ADDED: Asset management
-    { name: "Tax Center", icon: Receipt, page: "/tax" },
-    { name: "Settings", icon: Settings, page: "/settings" },
+    { name: t('dashboard') || "Dashboard", icon: LayoutDashboard, page: "/dashboard" },
+    { name: t('income') || "Income", icon: TrendingUp, page: "/income" },
+    { name: t('expenditure') || "Expenditure", icon: TrendingDown, page: "/expenditure" },
+    { name: t('profitLoss') || "Profit & Loss", icon: BarChart3, page: "/profitloss" },
+    { name: t('projects') || "Projects", icon: Briefcase, page: "/projects" },
+    { name: t('smartBorrow') || "Smart Borrow", icon: Wallet, page: "/smart-borrow" },
+    { name: t('monthlyBills') || "Monthly Bills", icon: Calendar, page: "/monthly-bills" },
+    { name: t('investment') || "Investment", icon: TrendingUp, page: "/investment" },
+    { name: t('asset') || "Asset", icon: Package, page: "/asset" },
+    { name: t('taxCenter') || "Tax Center", icon: Receipt, page: "/tax" },
+    { name: t('settings') || "Settings", icon: Settings, page: "/settings" },
   ];
 
   const clearSessionData = () => {
@@ -231,7 +234,7 @@ const Sidebar = ({ userSession, setUserSession }) => {
           </div>
         )}
 
-        {/* Logout Button with enhanced styling */}
+        {/* Logout Button with enhanced styling and translations */}
         <div className="p-4 border-t border-gray-700/60">
           <button
             onClick={handleLogout}
@@ -249,7 +252,7 @@ const Sidebar = ({ userSession, setUserSession }) => {
               )}
             </div>
             <span className="font-medium">
-              {isLoggingOut ? "Logging out..." : "Logout"}
+              {isLoggingOut ? (t('Logout') || "Logout...") : (t('Logout') || "Logout")}
             </span>
           </button>
         </div>

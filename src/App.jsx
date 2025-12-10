@@ -77,6 +77,27 @@ const GlobalThemeWrapper = ({ children }) => {
   );
 };
 
+// --------- Global Language Wrapper (handles language changes without breaking CSS) ---------
+const GlobalLanguageWrapper = ({ children }) => {
+  const { language } = useLanguage();
+  
+  // Apply language to DOM without remounting
+  useEffect(() => {
+    const html = document.documentElement;
+    html.lang = language;
+    
+    // Trigger a small update to notify components of language change
+    // This allows components to re-render their content without destroying the entire tree
+    document.dispatchEvent(new CustomEvent('languageChanged', { detail: { language } }));
+  }, [language]);
+  
+  return (
+    <div data-language={language} className="language-wrapper">
+      {children}
+    </div>
+  );
+};
+
 // ----------------- Enhanced Loader Components -----------------
 const EnhancedLoader = ({
   message = "Loading...",
@@ -640,6 +661,7 @@ const AppContent = () => {
   const { userSession, setUserSession, clearSession, loadingSession } = useSessionPersistence();
   const location = useLocation();
   const navigate = useNavigate();
+  const { language } = useLanguage(); // Add language hook to trigger re-renders
   const isAuthPage = ["/", "/auth", "/login"].includes(location.pathname);
   const { isExpanded, isVisible, showSidebar, hideSidebar } = useSidebar();
 
@@ -788,7 +810,7 @@ const App = () => {
     }
   }, []);
 
-  // CRITICAL FIX: Proper context provider order with GlobalThemeWrapper
+  // CRITICAL FIX: Proper context provider order with GlobalThemeWrapper and GlobalLanguageWrapper
   return (
     <BrowserRouter>
       <ErrorBoundary>
@@ -797,7 +819,9 @@ const App = () => {
             <SettingsProvider>
               <SidebarProvider>
                 <GlobalThemeWrapper>
-                  <AppContent />
+                  <GlobalLanguageWrapper>
+                    <AppContent />
+                  </GlobalLanguageWrapper>
                 </GlobalThemeWrapper>
               </SidebarProvider>
             </SettingsProvider>
@@ -806,6 +830,6 @@ const App = () => {
       </ErrorBoundary>
     </BrowserRouter>
   );
-};
+}
 
 export default App;

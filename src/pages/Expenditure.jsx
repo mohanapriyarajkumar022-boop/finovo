@@ -8,6 +8,7 @@ import {
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import API_BASE from '../config/api';
 import authService from '../services/authService';
+import { useLanguage } from '../context/LanguageContext';
 
 const API_HOST = API_BASE.replace(/\/$/, '');
 
