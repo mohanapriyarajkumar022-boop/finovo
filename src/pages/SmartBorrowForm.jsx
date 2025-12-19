@@ -31,6 +31,7 @@ import {
   useTheme,
   useMediaQuery
 } from '@mui/material';
+import { useLanguage } from '../context/LanguageContext';
 import {
   Add as AddIcon,
   AccountBalanceWallet as WalletIcon,
@@ -498,7 +499,7 @@ const TransactionForm = ({ open, onClose, onSuccess, editTransaction, formType }
               }
             }}
           >
-            Cancel
+            {t('cancel')}
           </Button>
           <Button 
             type="submit" 
@@ -516,7 +517,7 @@ const TransactionForm = ({ open, onClose, onSuccess, editTransaction, formType }
               }
             }}
           >
-            {loading ? 'Saving...' : editTransaction ? 'Update' : 'Save'}
+            {loading ? t('saving') : editTransaction ? t('update') : t('save')}
           </Button>
         </DialogActions>
       </form>
@@ -755,6 +756,7 @@ const TransactionItem = ({ transaction, onMenuAction }) => {
 
 // Main SmartBorrowForm Component - Beautiful Centered Layout
 const SmartBorrowForm = () => {
+  const { t } = useLanguage();
   const [formOpen, setFormOpen] = useState(false);
   const [editTransaction, setEditTransaction] = useState(null);
   const [formType, setFormType] = useState('borrow');

@@ -1,5 +1,6 @@
 // src/pages/assetmanagement.jsx
 import React, { useState, useEffect } from 'react';
+import { useLanguage } from '../context/LanguageContext';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -526,6 +527,7 @@ const AIService = {
 // ============================================
 
 const AssetManagementSystem = () => {
+  const { t } = useLanguage();
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [backendConnected, setBackendConnected] = useState(false);
@@ -1559,7 +1561,7 @@ const AssetManagementSystem = () => {
               disabled={saving}
               className="flex-1 px-6 py-3 border-2 border-gray-300 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
-              Cancel
+              {t('cancel')}
             </button>
             <button
               type="submit"
@@ -1571,7 +1573,7 @@ const AssetManagementSystem = () => {
               ) : (
                 <Database className="w-5 h-5" />
               )}
-              {saving ? 'Saving...' : 'Save to MongoDB'}
+              {saving ? t('saving') : t('saveToMongoDB')}
             </button>
           </div>
         </form>

@@ -471,7 +471,7 @@ body.keyboard-navigation *:focus {
 }
 
 /* ========================================================
-   SIDEBAR
+   SIDEBAR - MAINTAIN SIDEBAR LAYOUT ON MOBILE
    ======================================================== */
 
 .settings-sidebar {
@@ -485,8 +485,11 @@ body.keyboard-navigation *:focus {
               border-radius var(--transition-speed) ease,
               top var(--transition-speed) ease;
   visibility: visible !important;
-  display: block !important;
+  display: flex !important;
+  flex-direction: column !important;
   opacity: 1 !important;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
 }
 
 .compact-mode .settings-sidebar {
@@ -496,7 +499,7 @@ body.keyboard-navigation *:focus {
 }
 
 .settings-tab {
-  display: flex;
+  display: flex !important;
   align-items: center;
   gap: 12px;
   width: 100%;
@@ -512,6 +515,7 @@ body.keyboard-navigation *:focus {
   text-align: left;
   font-weight: 500;
   position: relative;
+  flex-direction: row !important;
 }
 
 .compact-mode .settings-tab {
@@ -549,6 +553,9 @@ body.keyboard-navigation *:focus {
 .tab-label {
   font-weight: 500;
   transition: font-size var(--transition-speed) ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .compact-mode .tab-label {
@@ -1871,150 +1878,586 @@ body.keyboard-navigation *:focus {
 }
 
 /* ========================================================
-   RESPONSIVE DESIGN
+   MOBILE RESPONSIVENESS - FIXED TO MAINTAIN SIDEBAR LAYOUT
    ======================================================== */
 
+/* Mobile-specific improvements */
 @media (max-width: 1024px) {
-  .settings-layout {
-    grid-template-columns: 220px 1fr;
-    gap: 16px;
-  }
-
   .settings-container {
     padding: 16px;
+    min-height: 100vh;
   }
-}
-
-@media (max-width: 768px) {
+  
   .settings-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
+    gap: 20px;
   }
-
-  .settings-sidebar {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    position: static;
-    overflow-x: auto;
-  }
-
-  .settings-tab {
-    flex-direction: column;
-    padding: 12px 8px;
-    text-align: center;
-    gap: 6px;
-  }
-
-  .tab-label {
-    font-size: 0.75rem;
-  }
-
-  .settings-content {
-    padding: 20px;
-  }
-
+  
   .settings-header {
     flex-direction: column;
     gap: 16px;
+    padding: 24px;
+    margin-bottom: 20px;
+    border-radius: 16px;
+    text-align: center;
   }
-
+  
   .settings-header h1 {
     font-size: 1.5rem;
+    justify-content: center;
   }
-
+  
+  .settings-subtitle {
+    font-size: 0.875rem;
+  }
+  
   .header-actions {
-    flex-direction: column;
-    gap: 10px;
     width: 100%;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  
+  .save-status {
+    width: auto;
+    max-width: 100%;
+    padding: 10px 16px;
+    font-size: 0.8125rem;
+    text-align: center;
   }
   
   .btn-signout {
+    width: auto;
+    padding: 12px 20px;
+    font-size: 0.875rem;
+  }
+  
+  /* SIDEBAR - MAINTAIN VERTICAL LIST ON MOBILE (NOT GRID) */
+  .settings-sidebar {
+    position: static;
+    border-radius: 16px;
+    padding: 12px;
+    margin-bottom: 16px;
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    max-height: none;
+    overflow-y: visible;
+  }
+  
+  .settings-tab {
+    flex-direction: row !important;
+    align-items: center !important;
+    padding: 14px 16px !important;
+    margin-bottom: 6px !important;
+    gap: 12px !important;
+    border-radius: 10px;
+    text-align: left;
+    min-height: auto;
     width: 100%;
-    margin-top: 10px;
-    justify-content: center;
   }
-
+  
+  .tab-icon {
+    font-size: 1.25rem !important;
+  }
+  
+  .tab-label {
+    font-size: 0.875rem !important;
+    font-weight: 500;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .settings-content {
+    padding: 24px;
+    border-radius: 16px;
+    min-height: auto;
+  }
+  
+  .settings-section {
+    padding: 0;
+  }
+  
   .settings-section h2 {
-    font-size: 1.25rem;
+    font-size: 1.375rem;
+    gap: 8px;
   }
-
+  
+  .section-description {
+    font-size: 0.875rem;
+    margin-bottom: 24px;
+  }
+  
+  /* Profile section mobile improvements */
+  .profile-header-section {
+    padding: 20px;
+    border-radius: 16px;
+    margin-bottom: 24px;
+  }
+  
   .profile-image-container {
     flex-direction: column;
     text-align: center;
+    gap: 16px;
   }
-
+  
   .profile-image,
   .profile-image-placeholder {
     width: 100px;
     height: 100px;
   }
-
+  
+  .profile-initials {
+    font-size: 2.5rem;
+  }
+  
+  .profile-image-info h3 {
+    font-size: 1.375rem;
+  }
+  
+  .profile-email {
+    font-size: 0.875rem;
+  }
+  
+  /* Setting groups mobile improvements */
+  .setting-group {
+    margin-bottom: 20px;
+  }
+  
+  .setting-group label {
+    font-size: 0.875rem;
+    margin-bottom: 8px;
+  }
+  
+  .setting-group input[type="text"],
+  .setting-group input[type="email"],
+  .setting-group input[type="tel"],
+  .setting-group input[type="password"],
+  .setting-group textarea,
+  .setting-group select {
+    padding: 14px 16px;
+    font-size: 1rem;
+    border-radius: 10px;
+  }
+  
+  .setting-group textarea {
+    min-height: 120px;
+  }
+  
+  /* Toggle groups mobile improvements */
+  .toggle-group label {
+    padding: 16px;
+    gap: 12px;
+    border-radius: 10px;
+  }
+  
+  .toggle-label {
+    font-size: 0.875rem;
+  }
+  
+  .toggle-group input[type="checkbox"] {
+    width: 44px;
+    height: 24px;
+    min-width: 44px;
+  }
+  
+  .toggle-group input[type="checkbox"]::before {
+    width: 20px;
+    height: 20px;
+    top: 2px;
+    left: 2px;
+  }
+  
+  .toggle-group input[type="checkbox"]:checked::before {
+    left: 22px;
+  }
+  
+  /* Account cards mobile improvements */
   .account-type-cards {
     grid-template-columns: 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
   }
-
-  .about-actions {
+  
+  .account-card {
+    padding: 20px;
+    border-radius: 16px;
+  }
+  
+  .account-card-icon {
+    font-size: 2.5rem;
+  }
+  
+  .account-card h3 {
+    font-size: 1.125rem;
+  }
+  
+  .account-card p {
+    font-size: 0.8125rem;
+  }
+  
+  .account-card li {
+    font-size: 0.8125rem;
+    padding: 5px 0;
+  }
+  
+  /* Color picker mobile improvements */
+  .color-picker-group {
     flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
   }
-
+  
+  .color-picker-group input[type="color"] {
+    width: 100%;
+    height: 60px;
+    min-height: 60px;
+    border-radius: 10px;
+  }
+  
+  /* Buttons mobile improvements */
   .btn-save,
   .btn-secondary,
   .btn-danger {
     width: 100%;
     justify-content: center;
+    padding: 16px;
+    font-size: 1rem;
+    border-radius: 10px;
+    margin-right: 0;
+    margin-bottom: 12px;
   }
-
+  
+  .password-change-section .btn-secondary {
+    margin-bottom: 0;
+  }
+  
+  /* About section mobile improvements */
   .about-item {
     flex-direction: column;
     align-items: flex-start;
     gap: 6px;
+    padding: 12px 0;
   }
-
+  
+  .about-item strong {
+    font-size: 0.875rem;
+    width: 100%;
+  }
+  
+  .about-item span {
+    font-size: 0.875rem;
+    width: 100%;
+    text-align: left;
+  }
+  
+  .about-actions {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  /* Modal mobile improvements */
   .modal-content {
     width: 95%;
-    margin: 20px;
+    margin: 16px;
+    max-height: 90vh;
+    overflow-y: auto;
   }
-
+  
+  .modal-header {
+    padding: 20px;
+  }
+  
+  .modal-body {
+    padding: 20px;
+  }
+  
   .modal-footer {
-    flex-direction: column-reverse;
+    padding: 20px;
+    flex-direction: column;
+    gap: 12px;
   }
-
+  
   .modal-footer button {
     width: 100%;
   }
-
+  
+  /* Preview content mobile improvements */
   .preview-content {
     grid-template-columns: 1fr;
+    gap: 12px;
   }
-
+  
+  .preview-item {
+    padding: 16px;
+  }
+  
+  .preview-icon {
+    width: 44px;
+    height: 44px;
+  }
+  
+  /* Currency and date options mobile improvements */
   .currency-options,
   .date-format-options {
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  
+  .currency-option,
+  .date-option {
+    padding: 14px 12px;
+    font-size: 0.875rem;
+    border-radius: 10px;
+  }
+  
+  /* Two-factor section mobile improvements */
+  .two-factor-section {
+    padding: 20px;
+    border-radius: 16px;
+  }
+  
+  .two-factor-status {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+  
+  .status-badge {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .btn-sm {
+    width: 100%;
+    padding: 14px;
+    font-size: 0.875rem;
   }
 }
 
-@media (max-width: 480px) {
+/* Tablet improvements */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .settings-container {
+    padding: 20px;
+  }
+  
+  .settings-layout {
+    grid-template-columns: 240px 1fr !important;
+    gap: 20px;
+  }
+  
   .settings-sidebar {
+    width: 240px;
+    position: sticky;
+    top: 20px;
+  }
+  
+  .settings-tab {
+    padding: 12px 16px;
+    font-size: 0.875rem;
+  }
+  
+  .tab-icon {
+    font-size: 1.125rem;
+  }
+  
+  .account-type-cards {
     grid-template-columns: repeat(2, 1fr);
   }
+}
 
-  .profile-initials {
-    font-size: 2.5rem;
+/* Small mobile devices */
+@media (max-width: 480px) {
+  .settings-container {
+    padding: 12px;
   }
-
-  .save-status {
+  
+  .settings-header {
+    padding: 20px;
+    border-radius: 14px;
+  }
+  
+  .settings-header h1 {
+    font-size: 1.375rem;
+  }
+  
+  .settings-sidebar {
+    padding: 10px;
+    border-radius: 14px;
+  }
+  
+  .settings-tab {
+    padding: 12px 14px !important;
+    gap: 10px !important;
+  }
+  
+  .tab-icon {
+    font-size: 1.125rem !important;
+  }
+  
+  .tab-label {
+    font-size: 0.8125rem !important;
+  }
+  
+  .settings-content {
+    padding: 20px;
+    border-radius: 14px;
+  }
+  
+  .settings-section h2 {
+    font-size: 1.25rem;
+  }
+  
+  .section-description {
     font-size: 0.8125rem;
-    padding: 8px 14px;
   }
-
-  .header-actions {
-    width: 100%;
+  
+  .profile-header-section {
+    padding: 16px;
+    border-radius: 14px;
   }
-
+  
+  .profile-image,
+  .profile-image-placeholder {
+    width: 90px;
+    height: 90px;
+  }
+  
+  .profile-initials {
+    font-size: 2.25rem;
+  }
+  
+  .setting-group input[type="text"],
+  .setting-group input[type="email"],
+  .setting-group input[type="tel"],
+  .setting-group input[type="password"],
+  .setting-group textarea,
+  .setting-group select {
+    padding: 12px 14px;
+    font-size: 0.9375rem;
+  }
+  
+  .toggle-group label {
+    padding: 14px;
+  }
+  
   .currency-options,
   .date-format-options {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 1fr;
   }
+  
+  .btn-save,
+  .btn-secondary,
+  .btn-danger {
+    padding: 14px;
+    font-size: 0.9375rem;
+  }
+  
+  .save-status {
+    padding: 10px;
+    font-size: 0.75rem;
+  }
+}
+
+/* Touch-friendly improvements for all mobile devices */
+@media (hover: none) and (pointer: coarse) {
+  .settings-tab,
+  .account-card,
+  .btn-save,
+  .btn-secondary,
+  .btn-danger,
+  .currency-option,
+  .date-option {
+    min-height: 44px;
+  }
+  
+  .setting-group input[type="text"],
+  .setting-group input[type="email"],
+  .setting-group input[type="tel"],
+  .setting-group input[type="password"],
+  .setting-group textarea,
+  .setting-group select {
+    min-height: 44px;
+    font-size: 16px; /* Prevents iOS zoom on focus */
+  }
+  
+  .toggle-group input[type="checkbox"] {
+    width: 52px;
+    height: 28px;
+    min-width: 52px;
+  }
+  
+  .toggle-group input[type="checkbox"]::before {
+    width: 24px;
+    height: 24px;
+    top: 2px;
+    left: 2px;
+  }
+  
+  .toggle-group input[type="checkbox"]:checked::before {
+    left: 26px;
+  }
+  
+  /* Improve tap targets */
+  .profile-image-edit {
+    width: 44px;
+    height: 44px;
+  }
+  
+  .modal-close {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* Landscape orientation improvements */
+@media (max-width: 768px) and (orientation: landscape) {
+  .settings-container {
+    padding: 12px;
+  }
+  
+  .settings-sidebar {
+    max-height: 300px;
+    overflow-y: auto;
+  }
+  
+  .settings-tab {
+    min-height: 50px;
+    padding: 10px !important;
+  }
+  
+  .tab-label {
+    font-size: 0.75rem !important;
+  }
+  
+  .settings-content {
+    padding: 16px;
+    min-height: auto;
+  }
+}
+
+/* Dark mode mobile improvements */
+.dark-mode .settings-sidebar {
+  background: var(--bg-tertiary);
+}
+
+.dark-mode .settings-tab:hover:not(:disabled) {
+  background: var(--bg-secondary);
+}
+
+.dark-mode .settings-tab.active {
+  background: var(--primary-color);
+  color: white;
+}
+
+.dark-mode .account-card {
+  background: var(--bg-tertiary);
+}
+
+.dark-mode .account-card.selected {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(124, 58, 237, 0.15) 100%);
 }
 
 /* ========================================================

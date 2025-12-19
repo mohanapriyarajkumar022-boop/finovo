@@ -918,32 +918,40 @@ input:focus, select:focus {
   --border-radius: 12px;
 }
 
-/* Dark Theme - Apply to root, html, and body */
+/* Dark Theme - Apply to root, html, and body - MATCHES YOUR IMAGE */
 :root.dark-mode,
 html.dark-mode,
 body.dark-mode,
 .dark-mode {
-  --bg-primary: #111827 !important;
-  --bg-secondary: #1f2937 !important;
-  --bg-sidebar: #111827 !important;
-  --bg-card: #1f2937 !important;
-  --bg-input: #374151 !important;
-  --bg-hover: #364051 !important;
-  --bg-tertiary: #374151 !important;
-  --bg-modal: #1f2937 !important;
-  --bg-dropdown: #374151 !important;
+  /* Main backgrounds - Deep navy/slate like your image */
+  --bg-primary: #1a1d29 !important;
+  --bg-secondary: #1a1d29 !important;
+  --bg-sidebar: #1a1d29 !important;
+  --bg-card: #232734 !important;
+  --bg-input: #2d3142 !important;
+  --bg-hover: #2d3142 !important;
+  --bg-tertiary: #2d3142 !important;
+  --bg-modal: #232734 !important;
+  --bg-dropdown: #2d3142 !important;
   
-  --text-primary: #f9fafb !important;
-  --text-secondary: #d1d5db !important;
-  --text-muted: #9ca3af !important;
-  --text-inverse: #111827 !important;
+  /* Text colors - High contrast white/gray */
+  --text-primary: #ffffff !important;
+  --text-secondary: #b4b8c5 !important;
+  --text-muted: #7d8395 !important;
+  --text-inverse: #1a1d29 !important;
   
-  --border-color: #374151 !important;
-  --border-secondary: #4b5563 !important;
+  /* Border colors - Subtle dark borders */
+  --border-color: #2d3142 !important;
+  --border-secondary: #3d4254 !important;
   
-  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px 0 rgba(0, 0, 0, 0.2) !important;
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3) !important;
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.4) !important;
+  /* Shadows - Deeper shadows for dark theme */
+  --shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.4) !important;
+  --shadow-md: 0 4px 12px 0 rgba(0, 0, 0, 0.5) !important;
+  --shadow-lg: 0 8px 24px 0 rgba(0, 0, 0, 0.6) !important;
+  
+  /* Primary color - Purple accent from your image */
+  --primary-color: #8b5cf6 !important;
+  --primary-hover: #7c3aed !important;
 }
 
 /* Light Theme Explicit */

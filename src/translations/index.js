@@ -122,6 +122,10 @@ export const translations = {
     auto: 'Auto',
     primaryColor: 'Primary Color',
     fontSize: 'Font Size',
+    saving: 'Saving...',
+    update: 'Update',
+    save: 'Save',
+    saveToMongoDB: 'Save to MongoDB',
     
     // Notifications
     emailNotifications: 'Email Notifications',

@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useLanguage } from '../context/LanguageContext';
 import axios from 'axios';
 import API_BASE from '../config/api';
 import {
   PieChart, Pie, Cell, ResponsiveContainer,
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend
 } from 'recharts';
-import { useLanguage } from '../context/LanguageContext';
 
 const Investment = ({ userSession }) => {
-  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [marketData, setMarketData] = useState(null);
   const [predictions, setPredictions] = useState(null);
@@ -16,6 +15,7 @@ const Investment = ({ userSession }) => {
   const [portfolio, setPortfolio] = useState(null);
   const [investmentHistory, setInvestmentHistory] = useState([]);
   const [loading, setLoading] = useState(false);
+  const { t } = useLanguage();
   const [investing, setInvesting] = useState(false);
   const [showIncomeForm, setShowIncomeForm] = useState(false);
   const [incomeForm, setIncomeForm] = useState({
@@ -458,7 +458,7 @@ const IncomeSection = ({ userIncomeData, showIncomeForm, setShowIncomeForm, inco
                 disabled={loading}
                 className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-400"
               >
-                {loading ? 'Saving...' : 'Get Personalized Investment Suggestions'}
+                {loading ? t('saving') : t('getPersonalizedInvestmentSuggestions')}
               </button>
             </div>
           </form>
@@ -474,7 +474,7 @@ const IncomeSection = ({ userIncomeData, showIncomeForm, setShowIncomeForm, inco
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-md p-6">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">💰 Your Financial Profile</h3>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">💰 {t('yourFinancialProfile') || 'Your Financial Profile'}</h3>
               <p className="text-green-600 font-semibold">{suggestions.suggestion}</p>
             </div>
             <button
@@ -482,7 +482,7 @@ const IncomeSection = ({ userIncomeData, showIncomeForm, setShowIncomeForm, inco
               className="flex items-center space-x-2 bg-white text-blue-600 px-4 py-2 rounded-md hover:bg-blue-50 transition-colors"
             >
               <span>✏️</span>
-              <span>Edit</span>
+              <span>{t('edit') || 'Edit'}</span>
             </button>
           </div>
           

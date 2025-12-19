@@ -1,6 +1,5 @@
-// frontend/src/contexts/SettingsContext.js
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import settingsService from '../services/settingsService';
+// src/context/SettingsContext.js - UPDATED WITH PRIVACY SETTINGS SUPPORT
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const SettingsContext = createContext();
 
@@ -19,331 +18,446 @@ export const SettingsProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [backendAvailable, setBackendAvailable] = useState(false);
 
-  const getCurrentUserEmail = () => {
-    return localStorage.getItem('userEmail') || '';
+  // Helper to safely get defaults
+  const getDefaultSettings = () => {
+    return {
+      profile: { 
+        name: '', 
+        email: '', 
+        phone: '', 
+        bio: '', 
+        profilePhoto: '', 
+        profilePhotoUrl: '' 
+      },
+      account: { 
+        type: 'individual', 
+        status: 'active' 
+      },
+      theme: { 
+        mode: 'light', 
+        primaryColor: '#8B5CF6', 
+        fontSize: 'medium', 
+        fontFamily: 'Inter' 
+      },
+      notifications: { 
+        email: true, 
+        push: true, 
+        transactionAlerts: true, 
+        weeklyReports: true, 
+        budgetAlerts: true, 
+        securityAlerts: true 
+      },
+      privacy: { 
+        profileVisibility: 'private', 
+        showEmail: false, 
+        twoFactorAuth: false, 
+        twoFactorPIN: '',
+        loginAlerts: true 
+      },
+      appearance: { 
+        compactMode: false, 
+        showAnimations: true, 
+        currencySymbol: '$', 
+        dateFormat: 'MM/DD/YYYY' 
+      },
+      language: { 
+        appLanguage: 'en', 
+        locale: 'en-US', 
+        currency: 'USD', 
+        timezone: 'UTC' 
+      },
+      performance: { 
+        enableCache: true, 
+        autoSave: true, 
+        lowDataMode: false 
+      },
+      accessibility: { 
+        highContrast: false, 
+        reduceMotion: false, 
+        screenReader: false, 
+        keyboardNavigation: false 
+      }
+    };
   };
 
-  const getCurrentUserName = () => {
-    return localStorage.getItem('userName') || '';
-  };
-
-  const getCurrentUserId = () => {
-    return localStorage.getItem('userId') || '';
-  };
-
-  const checkAuthentication = () => {
-    try {
-      const token = localStorage.getItem('sessionToken') || localStorage.getItem('token');
-      const userId = getCurrentUserId();
-      const isAuthenticated = !!token && !!userId;
-      
-      console.log('🔐 Authentication check:', { 
-        isAuthenticated, 
-        hasToken: !!token, 
-        hasUserId: !!userId,
-        userId: userId,
-        email: getCurrentUserEmail()
-      });
-      
-      setIsAuthenticated(isAuthenticated);
-      return isAuthenticated;
-    } catch (err) {
-      console.error('Error checking authentication:', err);
-      return false;
+  // ✅ Apply privacy settings globally
+  const applyPrivacySettings = (privacySettings) => {
+    if (!privacySettings) return;
+    
+    // Store login alerts preference
+    if (privacySettings.loginAlerts !== undefined) {
+      localStorage.setItem('loginAlertsEnabled', privacySettings.loginAlerts.toString());
+    }
+    
+    // Store 2FA preference
+    if (privacySettings.twoFactorAuth !== undefined) {
+      localStorage.setItem('twoFactorEnabled', privacySettings.twoFactorAuth.toString());
+    }
+    
+    // Store profile visibility
+    if (privacySettings.profileVisibility) {
+      localStorage.setItem('profileVisibility', privacySettings.profileVisibility);
+    }
+    
+    // Store email visibility
+    if (privacySettings.showEmail !== undefined) {
+      localStorage.setItem('showEmail', privacySettings.showEmail.toString());
     }
   };
 
-  const getDefaultSettings = () => {
-    const currentEmail = getCurrentUserEmail();
-    const currentName = getCurrentUserName();
+  // ✅ Apply accessibility settings globally
+  const applyAccessibilitySettings = (accessibilitySettings) => {
+    const root = document.documentElement;
+    const body = document.body;
     
-    return {
-      profile: {
-        name: currentName,
-        email: currentEmail,
-        phone: '',
-        bio: '',
-        profilePhoto: '',
-        profilePhotoUrl: ''
-      },
-      account: {
-        type: 'individual',
-        status: 'active'
-      },
-      theme: {
-        mode: 'light',
-        primaryColor: '#8B5CF6',
-        fontSize: 'medium',
-        fontFamily: 'Inter'
-      },
-      notifications: {
-        email: true,
-        push: true,
-        transactionAlerts: true,
-        weeklyReports: true,
-        budgetAlerts: true,
-        securityAlerts: true
-      },
-      privacy: {
-        profileVisibility: 'private',
-        showEmail: false,
-        twoFactorAuth: false,
-        loginAlerts: true
-      },
-      appearance: {
-        compactMode: false,
-        showAnimations: true,
-        currencySymbol: '$',
-        dateFormat: 'MM/DD/YYYY'
-      },
-      language: {
-        appLanguage: 'en',
-        locale: 'en-US',
-        currency: 'USD',
-        timezone: 'UTC'
-      },
-      performance: {
-        enableCache: true,
-        autoSave: true,
-        lowDataMode: false
-      },
-      accessibility: {
-        highContrast: false,
-        reduceMotion: false,
-        screenReader: false,
-        keyboardNavigation: false
+    if (accessibilitySettings) {
+      // Apply High Contrast
+      if (accessibilitySettings.highContrast) {
+        body.classList.add('high-contrast');
+        root.classList.add('high-contrast');
+      } else {
+        body.classList.remove('high-contrast');
+        root.classList.remove('high-contrast');
       }
-    };
+      
+      // Apply Reduce Motion
+      if (accessibilitySettings.reduceMotion) {
+        body.classList.add('reduce-motion');
+        root.classList.add('reduce-motion');
+      } else {
+        body.classList.remove('reduce-motion');
+        root.classList.remove('reduce-motion');
+      }
+      
+      // Apply Screen Reader settings (add aria attributes)
+      if (accessibilitySettings.screenReader) {
+        body.setAttribute('aria-live', 'polite');
+        body.setAttribute('aria-atomic', 'true');
+        body.classList.add('screen-reader-optimized');
+      } else {
+        body.removeAttribute('aria-live');
+        body.removeAttribute('aria-atomic');
+        body.classList.remove('screen-reader-optimized');
+      }
+      
+      // Apply Keyboard Navigation
+      if (accessibilitySettings.keyboardNavigation) {
+        body.classList.add('keyboard-navigation');
+        root.classList.add('keyboard-navigation');
+      } else {
+        body.classList.remove('keyboard-navigation');
+        root.classList.remove('keyboard-navigation');
+      }
+    }
   };
 
-  const ensureSettingsStructure = (settingsData) => {
-    const defaultSettings = getDefaultSettings();
-    const currentEmail = getCurrentUserEmail();
-    const currentName = getCurrentUserName();
-    
-    const mergeDeep = (target, source) => {
-      for (const key in source) {
-        if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-          if (!target[key]) target[key] = {};
-          mergeDeep(target[key], source[key]);
-        } else if (source[key] !== undefined && source[key] !== null) {
-          target[key] = source[key];
-        }
-      }
-      return target;
-    };
-    
-    const merged = mergeDeep(JSON.parse(JSON.stringify(defaultSettings)), settingsData);
-    
-    // Always ensure email and name are from current session
-    merged.profile.email = currentEmail;
-    merged.profile.name = currentName;
-    
-    return merged;
-  };
+  const checkAuthentication = useCallback(() => {
+    const token = localStorage.getItem('sessionToken') || localStorage.getItem('token');
+    const userId = localStorage.getItem('userId');
+    const isAuth = !!token && !!userId;
+    setIsAuthenticated(isAuth);
+    return isAuth;
+  }, []);
 
   const checkBackendAvailability = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/health', {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      
+      const response = await fetch('http://localhost:5000/api/settings/health');
       const isAvailable = response.ok;
       setBackendAvailable(isAvailable);
       return isAvailable;
     } catch (error) {
-      console.warn('⚠️ Backend is not available:', error.message);
+      console.error('🌐 Backend check failed:', error);
       setBackendAvailable(false);
       return false;
     }
   };
 
-  const fetchSettings = async () => {
+  // ✅ NEW: Dedicated Logout Function
+  const logoutUser = useCallback(async () => {
+    console.log('🚪 Executing Logout Procedure...');
+    
+    // 1. Attempt Backend Logout (Optional, don't let it block)
+    try {
+      const token = localStorage.getItem('sessionToken') || localStorage.getItem('token');
+      if (token) {
+        await fetch('http://localhost:5000/api/auth/logout', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('⚠️ Backend logout notification failed, proceeding with client cleanup', e);
+    }
+
+    // 2. Clear Context State
+    setSettings(getDefaultSettings());
+    setIsAuthenticated(false);
+    setError(null);
+
+    // 3. Clear Storage Mechanisms
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // 4. Clear Cookies
+    document.cookie.split(";").forEach((c) => {
+      document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
+    
+    console.log('✅ Local session destroyed');
+    return true;
+  }, []);
+
+  // ✅ MAIN FETCH FUNCTION
+  const fetchSettings = useCallback(async (forceRefresh = false) => {
+    const isAuth = checkAuthentication();
+    
+    if (!isAuth) {
+      const defaultSettings = getDefaultSettings();
+      setSettings(defaultSettings);
+      // Apply default accessibility settings
+      applyAccessibilitySettings(defaultSettings.accessibility);
+      // Apply default privacy settings
+      applyPrivacySettings(defaultSettings.privacy);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
+      
+      const token = localStorage.getItem('sessionToken') || localStorage.getItem('token');
+      const userId = localStorage.getItem('userId');
+      
+      if (!token || !userId) {
+        throw new Error('Authentication tokens missing');
+      }
 
-      const authenticated = checkAuthentication();
-      const backendAvailable = await checkBackendAvailability();
+      const isBackendAvailable = await checkBackendAvailability();
+      if (!isBackendAvailable) {
+        throw new Error('Backend server not available');
+      }
 
-      console.log('🔄 Fetch settings:', {
-        authenticated,
-        backendAvailable,
-        currentEmail: getCurrentUserEmail()
+      const response = await fetch('http://localhost:5000/api/settings', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
       });
 
-      if (authenticated && backendAvailable) {
-        try {
-          const response = await settingsService.getSettings();
+      if (response.status === 401) {
+        // Token expired or invalid - Auto logout
+        logoutUser();
+        throw new Error('Session expired');
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch settings: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data && data.success && data.settings) {
+        let backendData = data.settings;
+        
+        if (data.user) {
+          if (!backendData.profile) backendData.profile = {};
+          backendData.profile.email = data.user.email;
+          backendData.profile.name = data.user.name || backendData.profile.name || '';
           
-          if (response && response.success && response.data) {
-            let backendSettings = response.data;
-            
-            // Ensure current user info
-            if (backendSettings.profile) {
-              backendSettings.profile.email = getCurrentUserEmail();
-              backendSettings.profile.name = getCurrentUserName();
-            }
-            
-            const ensuredSettings = ensureSettingsStructure(backendSettings);
-            setSettings(ensuredSettings);
-            console.log('✅ Settings loaded from backend');
-          } else {
-            throw new Error('Invalid response from backend');
-          }
-        } catch (backendError) {
-          console.warn('⚠️ Backend fetch failed:', backendError.message);
-          const defaultSettings = getDefaultSettings();
-          setSettings(defaultSettings);
+          localStorage.setItem('userEmail', data.user.email);
+          localStorage.setItem('userName', data.user.name || '');
+          localStorage.setItem('userId', data.user.id || userId);
         }
-      } else {
-        console.log('🔐 Using default settings');
+
         const defaultSettings = getDefaultSettings();
-        setSettings(defaultSettings);
+        const mergedSettings = { ...defaultSettings, ...backendData };
+        
+        // Merge deep objects
+        Object.keys(defaultSettings).forEach(key => {
+          if (!mergedSettings[key]) {
+            mergedSettings[key] = defaultSettings[key];
+          } else if (typeof defaultSettings[key] === 'object' && mergedSettings[key]) {
+            mergedSettings[key] = { ...defaultSettings[key], ...mergedSettings[key] };
+          }
+        });
+
+        setSettings(mergedSettings);
+        
+        // ✅ Apply privacy settings globally
+        if (mergedSettings.privacy) {
+          applyPrivacySettings(mergedSettings.privacy);
+        }
+        
+        // ✅ Apply accessibility settings globally
+        if (mergedSettings.accessibility) {
+          applyAccessibilitySettings(mergedSettings.accessibility);
+        }
       }
     } catch (err) {
-      console.error('Error fetching settings:', err);
+      console.error('❌ Fetch error:', err);
       setError(err.message);
-      const defaultSettings = getDefaultSettings();
-      setSettings(defaultSettings);
+      // If authentication error, force clear
+      if (err.message === 'Session expired') {
+        setIsAuthenticated(false);
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [checkAuthentication, logoutUser]);
 
+  // Update Settings
   const updateSettings = async (section, sectionData) => {
     try {
       setError(null);
-      const authenticated = checkAuthentication();
-      const backendAvailable = await checkBackendAvailability();
+      const token = localStorage.getItem('sessionToken') || localStorage.getItem('token');
+      
+      if (!token) throw new Error('Authentication required');
 
-      if (authenticated && backendAvailable) {
-        try {
-          // If updating profile and the client included a base64 `profilePhoto`,
-          // upload it first and replace with `profilePhotoUrl` to avoid large
-          // payloads in the settings API.
-          const profilePayload = (section === 'profile' && sectionData) ? { ...sectionData } : null;
-          if (profilePayload && profilePayload.profilePhoto) {
-            const photo = profilePayload.profilePhoto;
-            const looksLikeBase64 = (typeof photo === 'string') && (photo.startsWith('data:image') || photo.length > 1000);
-            if (looksLikeBase64) {
-              try {
-                const uploadResp = await fetch('http://localhost:5000/api/upload/profile-photo', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ imageBase64: photo })
-                });
+      let endpoint = 'http://localhost:5000/api/settings/update-section';
+      if (section === 'profile') endpoint = 'http://localhost:5000/api/settings/profile';
 
-                const uploadJson = await uploadResp.json();
-                if (uploadResp.ok && uploadJson && uploadJson.success && uploadJson.url) {
-                  // Replace with URL and remove raw base64
-                  sectionData = { ...sectionData, profilePhotoUrl: uploadJson.url };
-                  delete sectionData.profilePhoto;
-                } else {
-                  console.warn('Image upload failed:', uploadJson);
-                  return { success: false, error: uploadJson.message || 'Image upload failed' };
-                }
-              } catch (uploadErr) {
-                console.error('Image upload error:', uploadErr);
-                return { success: false, error: 'Image upload error' };
-              }
-            }
-          }
+      const response = await fetch(endpoint, {
+        method: section === 'profile' ? 'PUT' : 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          ...(section !== 'profile' && { section }),
+          ...sectionData
+        })
+      });
 
-          const response = await settingsService.updateSection(section, sectionData);
-          
-          if (response && response.success) {
-            let updatedSettings = response.data;
-            
-            if (updatedSettings.profile) {
-              updatedSettings.profile.email = getCurrentUserEmail();
-              updatedSettings.profile.name = getCurrentUserName();
-            }
-            
-            const ensuredSettings = ensureSettingsStructure(updatedSettings);
-            setSettings(ensuredSettings);
-            console.log('✅ Settings updated in backend');
-            return { success: true, data: ensuredSettings };
-          } else {
-            throw new Error('Backend update failed');
-          }
-        } catch (backendError) {
-          console.warn('⚠️ Backend update failed:', backendError.message);
-          return { success: false, error: backendError.message };
+      const result = await response.json();
+
+      if (result && result.success) {
+        let updatedData = result.settings || result.data;
+        
+        if (result.user) {
+           if (!updatedData.profile) updatedData.profile = {};
+           updatedData.profile.email = result.user.email;
+           updatedData.profile.name = result.user.name || updatedData.profile?.name || '';
         }
+
+        setSettings(prev => {
+          const newSettings = {
+            ...prev,
+            ...updatedData,
+            [section]: { ...prev?.[section], ...updatedData[section] }
+          };
+          if (section === 'profile' && updatedData.profile) {
+            newSettings.profile = { ...prev?.profile, ...updatedData.profile };
+          }
+          return newSettings;
+        });
+        
+        // ✅ Apply privacy settings immediately if updated
+        if (section === 'privacy' && updatedData.privacy) {
+          applyPrivacySettings(updatedData.privacy);
+        }
+        
+        // ✅ Apply accessibility settings immediately if updated
+        if (section === 'accessibility' && updatedData.accessibility) {
+          applyAccessibilitySettings(updatedData.accessibility);
+        }
+        
+        return { success: true, data: updatedData, user: result.user };
       } else {
-        return { success: false, error: 'Not authenticated or backend unavailable' };
+        throw new Error(result.message || 'Update failed');
       }
     } catch (err) {
-      console.error('Update settings error:', err);
-      setError(err.message);
       return { success: false, error: err.message };
     }
   };
 
-  const resetSettings = async (tenantId) => {
+  const resetSettings = async () => {
     try {
-      setError(null);
-      const authenticated = checkAuthentication();
-      const backendAvailable = await checkBackendAvailability();
-
-      if (authenticated && backendAvailable) {
-        try {
-          const response = await settingsService.resetSettings(tenantId);
-          
-          if (response && response.success) {
-            const ensuredSettings = ensureSettingsStructure(response.data);
-            setSettings(ensuredSettings);
-            return { success: true, data: ensuredSettings };
-          } else {
-            throw new Error('Backend reset failed');
-          }
-        } catch (backendError) {
-          console.warn('⚠️ Backend reset failed:', backendError.message);
-          return { success: false, error: backendError.message };
+      const token = localStorage.getItem('sessionToken') || localStorage.getItem('token');
+      const response = await fetch('http://localhost:5000/api/settings/reset', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         }
-      } else {
-        return { success: false, error: 'Not authenticated or backend unavailable' };
+      });
+      const result = await response.json();
+      if (result.success) {
+        const newSettings = result.settings || result.data;
+        setSettings(newSettings);
+        // ✅ Apply privacy settings after reset
+        if (newSettings.privacy) {
+          applyPrivacySettings(newSettings.privacy);
+        }
+        // ✅ Apply accessibility settings after reset
+        if (newSettings.accessibility) {
+          applyAccessibilitySettings(newSettings.accessibility);
+        }
+        return { success: true };
       }
+      throw new Error(result.message);
     } catch (err) {
-      console.error('Reset settings error:', err);
-      setError(err.message);
       return { success: false, error: err.message };
     }
   };
 
+  const getCurrentUserEmail = () => {
+    if (settings?.profile?.email) return settings.profile.email;
+    return localStorage.getItem('userEmail') || '';
+  };
+  
+  const getCurrentUserName = () => {
+    if (settings?.profile?.name) return settings.profile.name;
+    return localStorage.getItem('userName') || '';
+  };
+
+  const getCurrentTenantId = () => {
+    if (settings?.tenantId) return settings.tenantId;
+    const stored = localStorage.getItem('tenantId');
+    return (stored && /^\d{6}$/.test(stored)) ? stored : '';
+  };
+
+  // Initialize
   useEffect(() => {
     fetchSettings();
     
-    const handleLogin = () => {
-      console.log('🔔 Login event detected, refreshing settings');
-      fetchSettings();
+    const handleStorageChange = (e) => {
+      if (['sessionToken', 'token', 'userId'].includes(e.key)) {
+        if (!localStorage.getItem('sessionToken') && !localStorage.getItem('token')) {
+          logoutUser(); // Logout if token removed from storage
+        } else {
+          fetchSettings(true);
+        }
+      }
     };
     
-    window.addEventListener('userLoggedIn', handleLogin);
-    
-    return () => {
-      window.removeEventListener('userLoggedIn', handleLogin);
-    };
-  }, []);
-
-  const value = {
-    settings: settings || getDefaultSettings(),
-    loading,
-    error,
-    isAuthenticated,
-    backendAvailable,
-    updateSettings,
-    resetSettings,
-    refetchSettings: fetchSettings,
-    checkAuthentication,
-    clearError: () => setError(null)
-  };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [fetchSettings, logoutUser]);
 
   return (
-    <SettingsContext.Provider value={value}>
+    <SettingsContext.Provider value={{
+      settings: settings || getDefaultSettings(),
+      loading,
+      error,
+      isAuthenticated,
+      backendAvailable,
+      updateSettings,
+      resetSettings,
+      refetchSettings: () => fetchSettings(true),
+      checkAuthentication,
+      getCurrentUserEmail,
+      getCurrentUserName,
+      getCurrentTenantId,
+      logoutUser // ✅ Exported here
+    }}>
       {children}
     </SettingsContext.Provider>
   );
 };
+
+export default SettingsProvider;

@@ -35,6 +35,7 @@ const translations = {
     spending: 'Spending',
     manageProjects: 'Manage Projects',
     page: 'Page',
+      yourFinancialProfile: 'Your Financial Profile',
     
     // Settings
     settings: 'Settings',
@@ -65,6 +66,16 @@ const translations = {
     emailCannotChange: 'Email cannot be changed here. Contact support to update.',
     tellAboutYourself: 'Tell us about yourself...',
     clickToUpload: 'Click on the camera icon to upload a new photo',
+    profileDescription: 'Update your profile information stored in database',
+    imagesCompressed: 'Images are automatically compressed before saving',
+    nameWillBeSaved: 'Name will be saved to database',
+    emailIsManaged: 'Email is managed through authentication system',
+    pleaseLogInToSeeEmail: 'Please log in to see your email',
+    phoneWillBeSaved: 'Phone number will be saved to database',
+    bioWillBeSaved: 'Bio will be saved to database',
+    saveProfileInfo: 'Save Profile Info',
+    saveNote: '(Saves name, phone, and bio only)',
+    pleaseLogInToSave: '⚠️ Please log in to save to database',
     
     // Language & Region
     languageRegion: 'Language & Region',
@@ -103,9 +114,21 @@ const translations = {
     noSettingsToSave: 'No settings to save',
     settingsSaved: 'Settings saved successfully!',
     saveFailed: 'Failed to save',
+    saveAccountType: 'Save Account Type',
+    saveTheme: 'Save Theme',
+    saveNotifications: 'Save Notifications',
+    savePrivacySettings: 'Save Privacy Settings',
+    saveAppearance: 'Save Appearance',
+    saveLanguageSettings: 'Save Language Settings',
+    savePerformanceSettings: 'Save Performance Settings',
+    saveAccessibilitySettings: 'Save Accessibility Settings',
     languageChanged: 'Language changed to',
     languageChangeFailed: 'Failed to change language',
     languageChangeError: 'Error changing language',
+    saving: 'Saving...',
+    update: 'Update',
+    save: 'Save',
+    saveToMongoDB: 'Save to MongoDB',
     currencyChanged: 'Currency changed to',
     currencyChangeFailed: 'Failed to change currency',
     currencyChangeError: 'Error changing currency',
@@ -120,6 +143,11 @@ const translations = {
     passwordMinLength: 'Password must be at least 6 characters',
     passwordChanged: 'Password changed successfully!',
     passwordChangeError: 'Error changing password',
+    getPersonalizedInvestmentSuggestions: 'Get Personalized Investment Suggestions',
+    enterYourAge: 'Enter your age',
+    beginner: 'Beginner',
+    intermediate: 'Intermediate',
+    expert: 'Expert',
     signedOut: 'Successfully signed out!',
     signoutError: 'Error during signout',
     resetConfirm: 'Are you sure you want to reset all settings to default? This cannot be undone.',
@@ -160,6 +188,8 @@ const translations = {
     applying: 'Applying...',
     saving: 'Saving...',
     signingOut: 'Signing Out...'
+    ,
+    twoFactorRemainsEnabled: 'Two-factor authentication will remain enabled'
   },
   hi: {
     // Common
@@ -1025,29 +1055,31 @@ export const LanguageProvider = ({ children }) => {
       
       // Save to backend if authenticated
       const token = localStorage.getItem('sessionToken') || localStorage.getItem('token');
-      const userId = localStorage.getItem('userId');
-      
-      if (token && userId) {
+      const storedTenantId = localStorage.getItem('tenantId') || localStorage.getItem('userId');
+
+      if (token && storedTenantId) {
         try {
           const response = await fetch('http://localhost:5000/api/settings/update-section', {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${token}`,
-              'Tenant-ID': userId
+              'Tenant-ID': storedTenantId
             },
             body: JSON.stringify({
               section: 'language',
               settings: {
                 appLanguage: newLanguage,
                 locale: newLanguage,
-                tenantId: userId
+                tenantId: storedTenantId
               }
             })
           });
-          
+
           if (response.ok) {
             console.log('✅ Language saved to backend');
+          } else {
+            console.warn('⚠️ Language save returned non-OK status:', response.status);
           }
         } catch (error) {
           console.warn('⚠️ Could not save to backend:', error);
@@ -1069,18 +1101,46 @@ export const LanguageProvider = ({ children }) => {
   const t = useCallback((key) => {
     if (!key) return '';
     
+    // If key already exists as a dotted path use it
     const keys = key.split('.');
     let value = translations[currentLanguage];
-    
+
     for (const k of keys) {
       value = value?.[k];
     }
-    
-    // Fallback to English
+
+    // Fallback: if not found try English dotted path
     if (!value && currentLanguage !== 'en') {
       value = keys.reduce((obj, k) => obj?.[k], translations.en);
+      if (value) return value;
     }
-    
+
+    // Case-insensitive dotted lookup
+    if (!value) {
+      const lowerKeys = keys.map(k => k.toLowerCase());
+      value = lowerKeys.reduce((obj, k) => obj?.[k], translations[currentLanguage]);
+      if (!value && currentLanguage !== 'en') {
+        value = lowerKeys.reduce((obj, k) => obj?.[k], translations.en);
+        if (value) return value;
+      }
+      if (value) return value;
+    }
+
+    // If the caller passed an English literal (e.g. "Display Name"), attempt to find
+    // the corresponding key by searching the English translations values.
+    if (!value) {
+      const literal = String(key).trim();
+      const normalized = literal.replace(/\s+/g, ' ').replace(/[\u{1F300}-\u{1F6FF}]/gu, '').trim();
+      // Search translations.en for a matching value (case-insensitive)
+      const foundKey = Object.keys(translations.en).find(k => {
+        const v = String(translations.en[k] || '').trim();
+        return v.toLowerCase() === normalized.toLowerCase();
+      });
+      if (foundKey) {
+        return translations[currentLanguage][foundKey] || translations.en[foundKey] || key;
+      }
+    }
+
     return value || key;
   }, [currentLanguage, forceUpdate]); // Add forceUpdate to dependency
 

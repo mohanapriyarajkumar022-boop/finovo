@@ -252,7 +252,7 @@ const Sidebar = ({ userSession, setUserSession }) => {
               )}
             </div>
             <span className="font-medium">
-              {isLoggingOut ? (t('Logout') || "Logout...") : (t('Logout') || "Logout")}
+              {isLoggingOut ? (t('Logout') || 'Logout...') : (t('Logout') || 'Logout')}
             </span>
           </button>
         </div>
