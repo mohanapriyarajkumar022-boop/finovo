@@ -3489,7 +3489,7 @@ const Settings = () => {
                 
                 <div className="about-item">
                   <strong>Support:</strong>
-                  <span>support@finovo.app</span>
+                  <span>finovoapp@gmail.com</span>
                 </div>
                 
                 <div className="about-item">
